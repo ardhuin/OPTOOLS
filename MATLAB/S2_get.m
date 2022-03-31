@@ -18,7 +18,7 @@ bands=[4  3  2 ];
 %bands=[12 11 5 ]; %all 20 m
 %bands=[12 11 2 ];  %20 and 10 m
 boxi=[5600 6400  3600 4400];
-S2file='T11SMS_20160429T183252';
+S2file='/home/ardhuin/ADMIN/PROPOSALS/EE11/S2/DATA/T11SMS_20160429T183252';
 [imgs,S2xml,DSxml,S2txt,nx,ny,dx,dy,x,y,boxi]=S2_read(S2file,boxi,bands); 
 
 % now grabs the view angles from the xml structure ... 

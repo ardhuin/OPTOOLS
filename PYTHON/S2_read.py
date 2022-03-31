@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import rasterio
 from rasterio.windows import Window
 def S2_read(S2file,boxi,bands):
     """
@@ -14,10 +15,14 @@ def S2_read(S2file,boxi,bands):
     arrs = []
     print(S2file)
     for jp2_band in bands:
+        dataset = rasterio.open(S2file+'_'+jp2_band+'.jp2')
+        iystart=dataset.height-boxi[3]
+        print(iystart)
+        print(boxi[2])
         with rasterio.open(S2file+'_'+jp2_band+'.jp2') as image:
-            w=image.read(1, window=Window(boxi[2]-1, boxi[0]-1, boxi[3]-boxi[2]+1, boxi[1]-boxi[0]+1))
+            w=image.read(1, window=Window(boxi[0]-1,iystart,  boxi[1]-boxi[0]+1,  boxi[3]-boxi[2]+1))
         print(w.shape)
-        arrs.append(w)
+        arrs.append(np.transpose(np.fliplr(w)))
 
     imgs = np.array(arrs, dtype=arrs[0].dtype)
 
