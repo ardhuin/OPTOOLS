@@ -1,10 +1,10 @@
-function [imgs,S2xml,DSxml,S2txt,nx,ny,dx,dy,x,y,boxi]=read_S2(file,boxi,bands);
+function [imgs,S2xml,DSxml,S2txt,nx,ny,dx,dy,x,y,boxi]=read_S2(S2file,boxi,bands);
 % Reads pieces from 3 or 4 images using data from 3 or 4 different bands ... 
 nb=length(bands);
 
 for ib=1:nb
    bis=sprintf('%02.f',bands(ib));
-   filename=[file '_B' bis '.jp2'];
+   filename=[S2file '_B' bis '.jp2'];
    info = imfinfo(filename)
    nxf=info.Width;
    nyf=info.Width;
