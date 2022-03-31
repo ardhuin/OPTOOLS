@@ -16,15 +16,20 @@ def S2_read(S2file,boxi,bands):
     print(S2file)
     for jp2_band in bands:
         dataset = rasterio.open(S2file+'_'+jp2_band+'.jp2')
+        NX=dataset.width
+        NY=dataset.height
         iystart=dataset.height-boxi[3]
         print(iystart)
         print(boxi[2])
         with rasterio.open(S2file+'_'+jp2_band+'.jp2') as image:
             w=image.read(1, window=Window(boxi[0]-1,iystart,  boxi[1]-boxi[0]+1,  boxi[3]-boxi[2]+1))
         print(w.shape)
+        [nx,ny]=w.shape
+        dx=10. 
+        dy=10.  # will be updated later
         arrs.append(np.transpose(np.fliplr(w)))
 
     imgs = np.array(arrs, dtype=arrs[0].dtype)
 
-    return imgs
+    return imgs,NX,NY,nx,ny,dx,dy
 

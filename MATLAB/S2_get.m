@@ -17,6 +17,7 @@ bands=[4 3 8 2 ];
 bands=[4  3  2 ];
 %bands=[12 11 5 ]; %all 20 m
 %bands=[12 11 2 ];  %20 and 10 m
+nb=length(bands);
 boxi=[5600 6400  3600 4400];
 S2file='/home/ardhuin/ADMIN/PROPOSALS/EE11/S2/DATA/T11SMS_20160429T183252';
 [imgs,S2xml,DSxml,S2txt,nx,ny,dx,dy,x,y,boxi]=S2_read(S2file,boxi,bands); 
@@ -54,8 +55,6 @@ S2sazi=geom.Children(4).Children(2).Children(4).Children(6);
 
 S2view=geom.Children(4).Children(6);
 ntables=length(S2txt);
-
-mean(std(double(img1)))./mean(mean(double(img1)))
 
 nzen1=(length(S2szen.Children)-1)/2;
 for i=1:nzen1
@@ -108,8 +107,8 @@ thetav=[ 0. 0. 0. 0.];
 phiv=thetav;
 offspec=thetav;
 phitrig=thetav;
-for jb=1:4;
-   if jb <= length(bands) 
+for jb=1:nb;
+   if jb <= nb 
    ib=bands(jb);
    else
    ib=bands(end);
@@ -165,6 +164,6 @@ D1n=Height.*sqrt(tan(thetav(1).*d2r).^2+tan(thetav(:).*d2r).^2-2.*tan(thetav(1).
 imgtimes=D1nr./VG;
 
 
- save S2img img1 img2 img3 img4 imgtimes x y nx ny dx dy sat sun mid offspec phitrig thetav
+ save S2img imgs imgtimes x y nx ny dx dy sat sun mid offspec phitrig thetav
 
 

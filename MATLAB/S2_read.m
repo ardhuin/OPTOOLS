@@ -70,9 +70,9 @@ for ib=1:nb
 end
 
 
-    filexml=[file '.xml'];
-    filexml2=[file '_DS.xml'];
-    filetxt=[file '.txt'];
+    filexml=[S2file '.xml'];
+    filexml2=[S2file '_DS.xml'];
+    filetxt=[S2file '.txt'];
 
     S2xml = parseXML(filexml);
     DSxml = xmlread(filexml2);
