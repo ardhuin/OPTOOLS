@@ -12,7 +12,7 @@ Some of the matlab code was later modified to contribute to the design of STREAM
 F. Ardhuin, LOPS, March 3, 2022
 
 
-## Contents and quick run
+## Contents and quick run: MATLAB
 
 MATLAB folder contains some of the original codes, in particular you can 
 
@@ -25,6 +25,7 @@ II) Simulate some satellite images and analyze the phase speeds
 [Efth,freq,dir2]=define_spectrum;
 
 U10=6;
+d2r=pi/180;
 Udir=40.*d2r; % direction to, trig. convention 
 Ux=0;
 Uy=0;
@@ -53,6 +54,12 @@ load S2img
 
 2.a 
 S2_3ana : this is the 3-image method of Ardhuin et al. (2021) : this is super-slow.
+
+
+## Contents and quick run: Python 
+
+Would be nice to add a few notebooks that do the same things as the matlab script described above .. 
+
 
 ## Add your files
 

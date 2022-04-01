@@ -4,7 +4,7 @@ function [Efth,freq,dir2]=define_spectrum;
 % F. Ardhuin, 2022/03/03
 
 % This particular choice corresponds to the case in Kudryavtsev et al. (2017) also looked at in Ardhuin et al. (2021)
-fileNC='CDIP46258_201604_spectrum.nc';
+fileNC='../DATA/CDIP46258_201604_spectrum.nc';
 datenow=datenum(2016,04,29,18,32,52);
 
 

@@ -103,7 +103,7 @@ sun(1,1)=sin(thetasun.*d2r).*cos(phisun.*d2r);
 sun(1,2)=sin(thetasun.*d2r).*sin(phisun.*d2r);
 sun(1,3)=cos(thetasun.*d2r);
 
-thetav=[ 0. 0. 0. 0.];
+thetav=zeros(nb,1);
 phiv=thetav;
 offspec=thetav;
 phitrig=thetav;
