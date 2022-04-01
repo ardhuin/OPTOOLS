@@ -57,6 +57,12 @@ S2_3ana : this is the 3-image method of Ardhuin et al. (2021) : this is super-sl
 
 
 ## Contents and quick run: Python 
+for running on datarmor you may need to : 
+git clone https://gitlab.ifremer.fr/fa1e926/optools OPTOOLS
+cd OPTOOLS/PYTHON
+module load conda/latest
+pip install rasterio
+python 
 
 Would be nice to add a few notebooks that do the same things as the matlab script described above .. 
 

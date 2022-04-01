@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
+import numpy as np
 from S2_read import *
 from s2_angs import *
-S2file='/home/ardhuin/ADMIN/PROPOSALS/EE11/S2/DATA/T11SMS_20160429T183252';
+#S2file='/home/ardhuin/ADMIN/PROPOSALS/EE11/S2/DATA/T11SMS_20160429T183252';
+S2file='/home/datawork-WW3/IMAGERY/S2/S2A_MSIL1C_20160429T183252_N0201_R027_T11SMS_20160429T184037.SAFE/GRANULE/L1C_T11SMS_A004457_20160429T184037/IMG_DATA/T11SMS_20160429T183252'
 boxi=[5600,6400,3600,4400] # East West South North 
 bands=['B04','B03','B02'];  
 nb=np.shape(bands)[0]
@@ -10,7 +12,7 @@ nb=np.shape(bands)[0]
 # defines indices of where we are in coarse array of angles
 indx=int(np.round((NX*10/dx-0.5*(boxi[0]+boxi[1]))/(5000/dx)))
 indy=int(np.round((NY*10/dx-0.5*(boxi[2]+boxi[3]))/(5000/dx)))
-
+S2xml='/home/datawork-WW3/IMAGERY/S2/S2A_MSIL1C_20160429T183252_N0201_R027_T11SMS_20160429T184037.SAFE/GRANULE/L1C_T11SMS_A004457_20160429T184037/MTD_TL.xml'
 (Tile_ID, AngleObs) = get_angleobs(S2file+'.xml')
 nrows=AngleObs['nrows']
 ncols=AngleObs['ncols']
