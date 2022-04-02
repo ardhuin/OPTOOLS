@@ -58,11 +58,10 @@ ntables=length(S2txt);
 
 nzen1=(length(S2szen.Children)-1)/2;
 for i=1:nzen1
-   A=S2szen.Children(i*2+1);
-   A=S2szen.Children(2).Children.Data;
+   A=S2szen.Children(2*i).Children.Data;
    B=cell2mat(textscan(char(A),'%f'));
    nzen2=length(B);
-   A=S2sazi.Children(2).Children.Data;
+   A=S2sazi.Children(2*i).Children.Data;
    C=cell2mat(textscan(char(A),'%f'));
    if i==1
      sunzen=zeros(nzen2,nzen1);
@@ -70,25 +69,26 @@ for i=1:nzen1
      viewzen=zeros(nzen2,nzen1,13,12)+NaN;
      viewazi=zeros(nzen2,nzen1,13,12)+NaN;
    end
-   sunzen(:,i)=B;
-   sunazi(:,i)=C;
+   sunzen(i,:)=B;
+   sunazi(i,:)=C;
    for j=1:ntables
    i1=S2txt(j,1)+1; % band index
    i2=S2txt(j,2);   % detector index
    A=geom.Children(4).Children(j*2+4).Children(2).Children(6).Children(i*2).Children(1).Data;
    B=cell2mat(textscan(char(A),'%f'));
-   viewzen(:,i,i1,i2)=flipud(B);
+   viewzen(i,:,i1,i2)=B;
    A=geom.Children(4).Children(j*2+4).Children(4).Children(6).Children(i*2).Children(1).Data;
    C=cell2mat(textscan(char(A),'%f'));
-   viewazi(:,i,i1,i2)=flipud(C);
+   viewazi(i,:,i1,i2)=C;
    end
 end
 
 % Warning : this is only correct for  <COL_STEP unit="m">5000</COL_STEP>
+% this indices are in the image orientation: origin at top-left and first index is vertical ...
 
-
-indx=1+round((NX*10/dx-0.5*(boxi(1)+boxi(2)))/(5000/dx));  % This takes the nearest cell in matrix 
+indx=1+round((0.5*(boxi(1)+boxi(2)))/(5000/dx));  % This takes the nearest cell in matrix 
 indy=1+round((NY*10/dx-0.5*(boxi(3)+boxi(4)))/(5000/dx));
+
 
 
 
@@ -96,11 +96,12 @@ indy=1+round((NY*10/dx-0.5*(boxi(3)+boxi(4)))/(5000/dx));
 sat=zeros(2,3);
 mid=sat;
 sun=zeros(1,3);
-thetasun=sunzen(indx,indy);
-phisun  =sunazi(indx,indy);
+thetasun=sunzen(indy,indx);
+phisun  =sunazi(indy,indx);
 
-sun(1,1)=sin(thetasun.*d2r).*cos(phisun.*d2r);
-sun(1,2)=sin(thetasun.*d2r).*sin(phisun.*d2r);
+
+sun(1,1)=sin(thetasun.*d2r).*sin(phisun.*d2r);
+sun(1,2)=sin(thetasun.*d2r).*cos(phisun.*d2r);
 sun(1,3)=cos(thetasun.*d2r);
 
 thetav=zeros(nb,1);
@@ -116,14 +117,13 @@ for jb=1:nb;
    if ib > 8
     ib=ib+1;
    end
-  ib=ib*1
-   thetasat=max(viewzen(indx,indy,ib,:));
-   phisat=max(viewazi(indx,indy,ib,:));
+   thetasat=max(viewzen(indy,indx,ib,:));
+   phisat=max(viewazi(indy,indx,ib,:));
    thetav(jb)=thetasat;
    phiv(jb)=phisat;
    
-   sat(jb,1)=sin(thetasat.*d2r).*cos(phisat.*d2r);
-   sat(jb,2)=sin(thetasat.*d2r).*sin(phisat.*d2r);
+   sat(jb,1)=sin(thetasat.*d2r).*sin(phisat.*d2r);
+   sat(jb,2)=sin(thetasat.*d2r).*cos(phisat.*d2r);
    sat(jb,3)=cos(thetasat.*d2r);
 
    mid(jb,:)=sun+sat(jb,:);  % vector that bisects the sun-target-sat angle 
@@ -131,12 +131,12 @@ for jb=1:nb;
    mid(jb,:)=mid(jb,:)./midn;
    
    offspec(jb)=acos(mid(jb,3))./d2r                % off-specular angle
-   phitrig(jb)=atan2(mid(jb,2),mid(jb,1))./d2r   % azimuth of bistatic look
+   phitrig(jb)=atan2(mid(jb,1),mid(jb,2))./d2r   % azimuth of bistatic look
 end
 
 [V, VG, Height]=read_ground_velocity(DSxml, latcenter);
 
-RE=4E7/(2*pi); % Earth radius
+RE=4E7/(2*pi); % Earth radius: WARNING : THIS IS NOT CONSISTENT WITH ELLIPSOID USED IN PREVIOUS FUNCTION
 %H=786000;
 %inclination=98.5;
 

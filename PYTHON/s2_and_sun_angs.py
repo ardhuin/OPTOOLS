@@ -154,7 +154,7 @@ def LOSVec(Lat, Lon, Zen, Az):
     Gx = (Rn*cos(Lat)*cos(Lon),
             Rn*cos(Lat)*sin(Lon),
             Rn*(1-ecc)*sin(Lat))
-    return (Sat, Gx)
+    return (Sat, Gx, LOS)
 
 def GrndVec(Lat, Lon):
     Rn = a / sqrt(1.0 - ecc *sin(Lat)*sin(Lat))
@@ -282,8 +282,8 @@ def get_angleobs(XML_File):
                     if (values[cindex][0] != 'NaN' and values[cindex][1] != 'NaN'):
                         zen = float(values[cindex][0]) / todeg
                         az = float(values[cindex][1]) / todeg
-                        (Sat, Gx) = LOSVec(lat, lon, zen, az)
-                        observe = [bandId, detectorId, xcoord, ycoord, Sat, Gx]
+                        (Sat, Gx, LOS) = LOSVec(lat, lon, zen, az)
+                        observe = [bandId, detectorId, xcoord, ycoord, Sat, Gx, LOS]
                         AngleObs['obs'].append(observe)
 
         if angle.tag == 'Sun_Angles_Grid':
@@ -315,8 +315,8 @@ def get_angleobs(XML_File):
                     if (values[cindex][0] != 'NaN' and values[cindex][1] != 'NaN'):
                         zen = float(values[cindex][0]) / todeg
                         az = float(values[cindex][1]) / todeg
-                        (Sat, Gx) = LOSVec(lat, lon, zen, az)
-                        sunall = [xcoord, ycoord, zen, az, Sat]
+                        (Sat, Gx, LOS) = LOSVec(lat, lon, zen, az)
+                        sunall = [xcoord, ycoord, zen, az, LOS]
                         AngleSun['sun'].append(sunall)
 
     return (tile_id, AngleObs, AngleSun)
