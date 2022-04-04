@@ -9,8 +9,9 @@ as described in Ardhuin et al. (JGR 2021).
 
 Some of the matlab code was later modified to contribute to the design of STREAM-O (proposal to ESA EE11). 
 
-F. Ardhuin, LOPS, March 3, 2022
 
+## Installation 
+git clone --quiet https://gitlab.ifremer.fr/fa1e926/optools
 
 ## Contents and quick run: MATLAB
 
