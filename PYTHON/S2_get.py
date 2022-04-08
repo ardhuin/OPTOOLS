@@ -17,6 +17,7 @@ indy=int(np.round((NY*10/dx-0.5*(boxi[2]+boxi[3]))/(5000/dx)))
 S2xml=S2file+'.xml'
 
 #S2xml='/home/datawork-WW3/IMAGERY/S2/S2A_MSIL1C_20160429T183252_N0201_R027_T11SMS_20160429T184037.SAFE/GRANULE/L1C_T11SMS_A004457_20160429T184037/MTD_TL.xml'
+S2_DS_xml='/home/datawork-WW3/IMAGERY/S2/S2A_MSIL1C_20160429T183252_N0201_R027_T11SMS_20160429T184037.SAFE/DATASTRIP/DS_SGS__20160429T220904_S20160429T184037/MTD_DS.xml'
 
 (Tile_ID, AngleObs, AngleSun) = get_angleobs(S2xml)
 ulx=AngleObs['ul_x']
@@ -76,6 +77,7 @@ for jb in ibands:
    phitrig[jj]=np.arctan2(mid[0],mid[1])*todeg   # azimuth of bistatic look
    jj=jj+1
 
+# This function read_ground_velocity was added in s2_and_sun_angs.py library ... not finished yetZZ
 #[V, VG, Height]=read_ground_velocity(DSxml, latcenter);
 
 
