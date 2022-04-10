@@ -46,7 +46,7 @@ def simple_retracking_process(wfm,edges,nHs=251,alti_sat=519000,dx=10,offset=10,
 	return Hs
 	
 
-def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,radi1,radi2,alti_sat):
+def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,radi1,radi2,alti_sat,range_shift):
 	# radi = 4000     # radius used to compute waveform
 	#radi1 = 900     # inner radius for Hs average
 	#radi2 = 1200    # outer radius for Hs average
@@ -55,28 +55,40 @@ def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,radi1,r
 	Xalt = np.zeros((nsamp,1))
 	Hs_retrack = np.zeros((nsamp,1))
 	Hs_std = np.zeros((nsamp,1))
+	Hs_std2 = np.zeros((nsamp,1))
 	waveforms=np.zeros((nsamp,len(edges_ref)-1))
 
 	# Footprint definition 
 	dx = X[1]-X[0]
 	dy = Y[1]-Y[0]
 	footprint=np.ones((2*nxa+1,2*nxa+1))
+	footprint1=np.ones((2*nxa+1,2*nxa+1))
+	footprint2=np.ones((2*nxa+1,2*nxa+1))
+
 	[Xa,Ya]=np.meshgrid(dx*np.arange(-nxa,nxa+1), dy*np.arange(-nxa,nxa+1))
 	dist_ground = (Xa**2+Ya**2)
-	footprint[dist_ground > radi2**2]=0
+	footprint[dist_ground > radi **2]=0
+	footprint1[dist_ground > radi1**2]=0
+	footprint2[dist_ground > radi2**2]=0
+	footprint2[dist_ground < radi1**2]=0
 
 	for isamp in range(nsamp):
 		ialt=(nxa+isamp*di).astype(int)
 		Xalt[isamp] = X[ialt]
 		surf=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint
-		# to have distance to satellite = range
-		r=np.sqrt(Xa**2+Ya**2+(alti_sat-surf)**2)-alti_sat+10
+		surf1=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint1
+		surf2=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint2
+                # spatial averaging of Hs : disc < radi1 et annulus from radi1 to radi2
+		Hs_std [isamp] = 4*np.std(surf1)/np.sqrt(np.mean(footprint1))
+		Hs_std2[isamp] = 4*np.std(surf2)/np.sqrt(np.mean(footprint2))
+
+		# r is distance to satellite = range + shift 
+		r=np.sqrt(Xa**2+Ya**2+(alti_sat-surf)**2)-alti_sat+range_shift
 		r[dist_ground > radi**2]=np.nan  # equivalent to multiplication by footprint
 
 		counts,_=np.histogram(r,bins=edges_ref)
 		Hs_retrack[isamp] = simple_retracking_process(counts,edges_ref,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ispolyfit=0) 
 		waveforms[isamp,:]=counts
-		Hs_std[isamp] = 4*np.std(surf)/np.sqrt(np.mean(footprint))
 
-	return Hs_std,Hs_retrack,Xalt,waveforms,surf
+	return Hs_std,Hs_std2,Hs_retrack,Xalt,waveforms,surf1
 
