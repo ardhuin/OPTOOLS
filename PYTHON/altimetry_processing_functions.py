@@ -55,6 +55,7 @@ def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,radi1,r
 	Xalt = np.zeros((nsamp,1))
 	Hs_retrack = np.zeros((nsamp,1))
 	Hs_std = np.zeros((nsamp,1))
+	Hs_stdbis = np.zeros((nsamp,1))
 	Hs_std2 = np.zeros((nsamp,1))
 	waveforms=np.zeros((nsamp,len(edges_ref)-1))
 
@@ -80,6 +81,9 @@ def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,radi1,r
 		surf2=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint2
                 # spatial averaging of Hs : disc < radi1 et annulus from radi1 to radi2
 		Hs_std [isamp] = 4*np.std(surf1)/np.sqrt(np.mean(footprint1))
+		surf1bis=np.nan*np.ones(surf1.shape)
+		surf1bis[footprint1>0]=surf1[footprint1>0]
+		Hs_stdbis [isamp] = 4*np.nanstd(surf1bis)
 		Hs_std2[isamp] = 4*np.std(surf2)/np.sqrt(np.mean(footprint2))
 
 		# r is distance to satellite = range + shift 
@@ -90,5 +94,5 @@ def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,radi1,r
 		Hs_retrack[isamp] = simple_retracking_process(counts,edges_ref,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ispolyfit=0) 
 		waveforms[isamp,:]=counts
 
-	return Hs_std,Hs_std2,Hs_retrack,Xalt,waveforms,surf1
+	return Hs_std,Hs_stdbis,Hs_std2,Hs_retrack,Xalt,waveforms,surf1,footprint1
 

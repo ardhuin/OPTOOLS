@@ -9,7 +9,7 @@ from Misc_functions import *
 ###  1. Dispersion relation and associated ##################################
 
 def phase_speed_from_k(k,depth=None,g=9.81):
-	if depth == 'None':
+	if depth == None:
 		# print("Deep water approximation")
 		C=np.sqrt(g/k)
 	else:
@@ -22,7 +22,7 @@ def phase_speed_from_sig_k(sig,k):
 	
 def group_speed_from_k(k,depth=None,g=9.81):
 	C=phase_speed_from_k(k,depth=depth,g=g)
-	if depth == 'None':
+	if depth == None:
 		# print("Deep water approximation")
 		Cg=C/2
 	else:
@@ -31,7 +31,7 @@ def group_speed_from_k(k,depth=None,g=9.81):
 	return Cg
 
 def sig_from_k(k,D=None,g=9.81):
-	if D=='None':
+	if D==None:
 		# print("Deep water approximation")
 		sig = np.sqrt(g*k)
 	else:
@@ -59,7 +59,7 @@ def k_from_f(f,D=None,g=9.81):
 	#k from f and dep. 2 Arguments: f and dep. 
 	eps=0.000001
 	sig=np.array(2*np.pi*f)
-	if D=='None':
+	if D==None:
 		# print("Deep water approximation")
 		k=sig**2/g
 	else:
