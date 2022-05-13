@@ -5,7 +5,7 @@ from rasterio.windows import Window
 def S2_read(S2file,boxi,bands):
     """
     reads sentinel-2 JPEG2000 optical image and saves it in 2D array
-    
+    Note that the imgs array is in the following geometry: channel 0 to N, Left to right, Bottom to top
     Args:
         S2file: path and filename for jp2 files 
         boxi : bounding box of sub-image: i1,i2,j1,j2

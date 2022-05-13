@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+# Note by FA: installed glymur pyshp shapely and commented iyt import idf_converter.lib
 """
 """
 
@@ -38,10 +39,10 @@ import scipy.interpolate
 import re
 import PIL.Image
 import PIL.ImageDraw
-import idf_converter.lib
+#import idf_converter.lib
 # import idf_converter.lib.rasterize
-from idf_converter.lib.types import InputOptions, OutputOptions, ReaderResult
-from idf_converter.lib.types import Granule
+from idf_converter_types import InputOptions, OutputOptions, ReaderResult
+from idf_converter_types import Granule
 
 logger = logging.getLogger(__name__)
 
