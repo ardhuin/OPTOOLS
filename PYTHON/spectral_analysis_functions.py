@@ -32,7 +32,6 @@ def FFT2D_one_array(arraya,dx,dy,n,isplot=0):
     ### --- prepare wavenumber vectors -------------------------
     kx=np.fft.fftshift(np.fft.fftfreq(nxtile, dx)) # wavenumber in cycles / m
     ky=np.fft.fftshift(np.fft.fftfreq(nytile, dy)) # wavenumber in cycles / m
-    print(kx)
     kx2,ky2 = np.meshgrid(kx,ky, indexing='ij')
     if isplot:
         X = np.arange(0,nxa*dx,dx) # from 0 to (nx-1)*dx with a dx step
@@ -99,8 +98,8 @@ def FFT2D_one_array(arraya,dx,dy,n,isplot=0):
         tile_by_windows = (tile_centered)*hanningxy
 
         # 
-        tileFFT = np.fft.fft2(tile_by_windows,norm="forward")#/(nx*ny)
-        tileFFT_shift = np.roll(tileFFT,(-shx,-shy),axis=(0,1))
+        tileFFT = np.fft.fft2(tile_by_windows,norm="forward")
+        tileFFT_shift = np.fft.fftshift(tileFFT)
         Eta_all[:,:,m] = (abs(tileFFT_shift)**2) *normalization
         Eta[:,:] = Eta[:,:] + (abs(tileFFT_shift)**2) *normalization #          % sum of spectra for all tiles
 
@@ -129,17 +128,10 @@ def FFT2D_two_arrays(arraya,arrayb,dx,dy,n,isplot=0):
 
     ### --- prepare wavenumber vectors -------------------------
     # wavenumbers starting at zero
-    kx=np.linspace(0,(nxtile-1)*dkxtile,nxtile)
-    ky=np.linspace(0,(nytile-1)*dkytile,nytile)
-    # Shift wavenumbers to have zero in the middle
-    kxs=np.roll(kx,-shx)
-    kys=np.roll(ky,-shy)
+    kx=np.fft.fftshift(np.fft.fftfreq(nxtile, dx)) # wavenumber in cycles / m
+    ky=np.fft.fftshift(np.fft.fftfreq(nytile, dy)) # wavenumber in cycles / m
+    kx2,ky2 = np.meshgrid(kx,ky, indexing='ij')
 
-    # change the first half to have negative wavenumber
-    kxs[:shx]=kxs[:shx]-kx[-1]-dkxtile
-    kys[:shy]=kys[:shy]-ky[-1]-dkytile
-
-    kx2,ky2 = np.meshgrid(kxs,kys, indexing='ij')
     if isplot:
         X = np.arange(0,nxa*dx,dx) # from 0 to (nx-1)*dx with a dx step
         Y = np.arange(0,nya*dy,dy)
@@ -208,26 +200,28 @@ def FFT2D_two_arrays(arraya,arrayb,dx,dy,n,isplot=0):
         tile_by_windows = (tile_centered)*hanningxy
 
         # 
-        tileFFT1 = np.fft.fft2(tile_by_windows,norm="forward")#/(nx*ny)
-        tileFFT1_shift = np.roll(tileFFT1,(-shx,-shy),axis=(0,1))
+        tileFFT = np.fft.fft2(tile_by_windows,norm="forward")
+        tileFFT_shift = np.fft.fftshift(tileFFT)
         Eta_all[:,:,m] = (abs(tileFFT1_shift)**2) *normalization
         Eta[:,:] = Eta[:,:] + (abs(tileFFT1_shift)**2) *normalization #          % sum of spectra for all tiles
 
         tile_centered=array1-np.mean(array2.flatten())
         tile_by_windows = (tile_centered)*hanningxy
 
-        tileFFT2 = np.fft.fft2(tile_by_windows,norm="forward")#/(nx*ny)
-        tileFFT2_shift = np.roll(tileFFT2,(-shx,-shy),axis=(0,1))
+        tileFFT2 = np.fft.fft2(tile_by_windows,norm="forward")
+        tileFFT2_shift = np.fft.fftshift(tileFFT)
         Etb_all[:,:,m] = (abs(tileFFT2_shift)**2) *normalization
         Etb[:,:] = Etb[:,:] + (abs(tileFFT2_shift)**2) *normalization #          % sum of spectra for all tiles
 
-        phase=phase+(zcb*np.conj(zca))*normalization
+        phase=phase+(tileFFT2_shift*np.conj(tileFFT_shift))*normalization
+        phases[:,:,m]=tileFFT2_shift*np.conj(tileFFT_shift)/(abs(tileFFT2_shift)*abs(tileFFT_shift)); 
 
 # Now works with averaged spectra
    
     Eta=Eta/nspec
     Etb=Etb/nspec
     coh=abs((phase/nspec)**2)/(Eta*Etb)      # spectral coherence
-
+    ang=np.angle(phase)
+    angstd=np.std(angle(phases),axis=2)
 
     return Eta,Etb,ang,angstd,coh,phases,kx2,ky2,dkxtile,dkytile
