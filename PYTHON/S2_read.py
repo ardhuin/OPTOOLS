@@ -1,8 +1,15 @@
 import numpy as np
-import os
+import os, glob
 import rasterio
+from s2_and_sun_angs  import *
 from rasterio.windows import Window
-def S2_read(S2file,boxi,bands):
+
+def find(name, path):
+    for root, dirs, files in os.walk(path):
+        if name in files:
+            return os.path.join(root, name)
+
+def S2_read(S2path,boxi,bands):
     """
     reads sentinel-2 JPEG2000 optical image and saves it in 2D array
     Note that the imgs array is in the following geometry: channel 0 to N, Left to right, Bottom to top
@@ -13,15 +20,25 @@ def S2_read(S2file,boxi,bands):
 
     """
     arrs = []
-    print(S2file)
+    XML_File=find('MTD_TL.xml',S2path)
+    print(XML_File)
+
+    (tile_id, AngleObs, AngleSun)=get_angleobs(XML_File)
+    #print('AngleObs:',AngleObs)
+    #print('AngleSun:',AngleSun)
+
     for jp2_band in bands:
-        dataset = rasterio.open(S2file+'_'+jp2_band+'.jp2')
+        files=glob.glob(os.path.join(S2path,'GRANULE/*/*/*'+jp2_band+'*.jp2'))
+        S2file=files[0]
+        print(S2file)
+        #dataset = rasterio.open(S2file+'_'+jp2_band+'.jp2')
+        dataset = rasterio.open(S2file)
         NX=dataset.width
         NY=dataset.height
         iystart=dataset.height-boxi[3]
         print(iystart)
         print(boxi[2])
-        with rasterio.open(S2file+'_'+jp2_band+'.jp2') as image:
+        with rasterio.open(S2file) as image:
             w=image.read(1, window=Window(boxi[0]-1,iystart,  boxi[1]-boxi[0]+1,  boxi[3]-boxi[2]+1))
         print(w.shape)
         [nx,ny]=w.shape
