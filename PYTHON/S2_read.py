@@ -42,7 +42,7 @@ def S2_read(S2path,boxi,bands):
         [nx,ny]=w.shape
         dx=10. 
         dy=10.  # will be updated later
-        arrs.append(np.transpose(np.fliplr(w)))
+        arrs.append(np.transpose(np.flipud(w)))
 
     imgs = np.array(arrs, dtype=arrs[0].dtype)
 
