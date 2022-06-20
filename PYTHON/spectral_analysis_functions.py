@@ -23,8 +23,8 @@ def FFT2D_one_array(arraya,dx,dy,n,isplot=0):
     nxtile=int(np.floor(nxa/n))
     nytile=int(np.floor(nya/n))
 
-    dkxtile=2*np.pi/(dx*nxtile)   
-    dkytile=2*np.pi/(dy*nytile)
+    dkxtile=1/(dx*nxtile)   
+    dkytile=1/(dy*nytile)
 
     shx = int(nxtile//2)   # OK if nxtile is even number
     shy = int(nytile//2)
@@ -120,8 +120,8 @@ def FFT2D_two_arrays(arraya,arrayb,dx,dy,n,isplot=0):
     nxtile=int(np.floor(nxa/n))
     nytile=int(np.floor(nya/n))
 
-    dkxtile=2*np.pi/(dx*nxtile)   
-    dkytile=2*np.pi/(dy*nytile)
+    dkxtile=1/(dx*nxtile)   
+    dkytile=1/(dy*nytile)
 
     shx = int(nxtile//2)   # OK if nxtile is even number
     shy = int(nytile//2)
@@ -152,8 +152,9 @@ def FFT2D_two_arrays(arraya,arrayb,dx,dy,n,isplot=0):
     ### --- Initialize Eta = mean spectrum over tiles ---------------------
 
     Eta=np.zeros((nxtile,nytile))
+    Etb=np.zeros((nxtile,nytile))
     phase=np.zeros((nxtile,nytile))
-    Eta_all=np.zeros((nxtile,nytile,mspec))
+    #Eta_all=np.zeros((nxtile,nytile,mspec))
     phases=np.zeros((nxtile,nytile,mspec))
     if isplot:
         fig1,ax1=plt.subplots(figsize=(12,6))
@@ -176,6 +177,7 @@ def FFT2D_two_arrays(arraya,arrayb,dx,dy,n,isplot=0):
             #        Select a 'tile' i.e. part of the surface : main loop ---------
 
             array1=np.double(arraya[ix1:ix2+1,iy1:iy2+1])
+            array2=np.double(arrayb[ix1:ix2+1,iy1:iy2+1])
             if isplot:
                 ax1.plot(X[[ix1,ix1,ix2,ix2,ix1]],Y[[iy1,iy2,iy2,iy1,iy1]],'-',color=colors[m],linewidth=2)
         else:
@@ -200,28 +202,29 @@ def FFT2D_two_arrays(arraya,arrayb,dx,dy,n,isplot=0):
         tile_by_windows = (tile_centered)*hanningxy
 
         # 
-        tileFFT = np.fft.fft2(tile_by_windows,norm="forward")
-        tileFFT_shift = np.fft.fftshift(tileFFT)
-        Eta_all[:,:,m] = (abs(tileFFT1_shift)**2) *normalization
+        tileFFT1 = np.fft.fft2(tile_by_windows,norm="forward")
+        tileFFT1_shift = np.fft.fftshift(tileFFT1)
+        #Eta_all[:,:,m] = (abs(tileFFT1_shift)**2) *normalization
         Eta[:,:] = Eta[:,:] + (abs(tileFFT1_shift)**2) *normalization #          % sum of spectra for all tiles
 
-        tile_centered=array1-np.mean(array2.flatten())
+        tile_centered=array2-np.mean(array2.flatten())
         tile_by_windows = (tile_centered)*hanningxy
 
         tileFFT2 = np.fft.fft2(tile_by_windows,norm="forward")
-        tileFFT2_shift = np.fft.fftshift(tileFFT)
-        Etb_all[:,:,m] = (abs(tileFFT2_shift)**2) *normalization
+        tileFFT2_shift = np.fft.fftshift(tileFFT2)#
+        #Etb_all[:,:,m] = (abs(tileFFT2_shift)**2) *normalization
         Etb[:,:] = Etb[:,:] + (abs(tileFFT2_shift)**2) *normalization #          % sum of spectra for all tiles
 
-        phase=phase+(tileFFT2_shift*np.conj(tileFFT_shift))*normalization
-        phases[:,:,m]=tileFFT2_shift*np.conj(tileFFT_shift)/(abs(tileFFT2_shift)*abs(tileFFT_shift)); 
+        phase=phase+(tileFFT2_shift*np.conj(tileFFT1_shift))*normalization
+        phases[:,:,m]=tileFFT2_shift*np.conj(tileFFT1_shift)/(abs(tileFFT2_shift)*abs(tileFFT1_shift)); 
 
 # Now works with averaged spectra
    
-    Eta=Eta/nspec
-    Etb=Etb/nspec
-    coh=abs((phase/nspec)**2)/(Eta*Etb)      # spectral coherence
+    Eta=Eta/mspec
+    Etb=Etb/mspec
+    coh=abs((phase/mspec)**2)/(Eta*Etb)      # spectral coherence
     ang=np.angle(phase)
-    angstd=np.std(angle(phases),axis=2)
+    crosr=np.real(phase)/mspec
+    angstd=np.std(np.angle(phases),axis=2)
 
-    return Eta,Etb,ang,angstd,coh,phases,kx2,ky2,dkxtile,dkytile
+    return Eta,Etb,ang,angstd,coh,crosr,phases,kx2,ky2,dkxtile,dkytile
