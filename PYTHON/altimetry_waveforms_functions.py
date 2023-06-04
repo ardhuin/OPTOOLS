@@ -7,7 +7,6 @@ from wave_physics_functions import *
 import scipy.special as sps # function erf
 import numpy as np
 import scipy
-from scipy import special
 from scipy.optimize import minimize
 
 def calc_footprint_diam(Hs,pulse_width = 1/(320*1e6),Rorbit=519*1e3,Rearth = 6370*1e3):
@@ -16,19 +15,113 @@ def calc_footprint_diam(Hs,pulse_width = 1/(320*1e6),Rorbit=519*1e3,Rearth = 637
     return 2*np.sqrt(Airemax_div_pi)
 
 
-def  waveform_erf(incognita,data)  :
+######################  Defines waveform theoretical models: most simple, 2 parameter erf 
+def  wf_erf2D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau)  :
+    
+     fff = noise+ 0.5 * (  1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])  ) ) 
+     return fff
+
+def  wf_erf2D(incognita,data)  :
      """
      returns the least-square distance between the waveform data[0] and the simplest erf waveform
-     only one unknown parameter: Hs 
+     two unknown parameter: (epoch,Hs)  both in meters
      """
+
      ydata =data[0] # Waveform
-     xdata =data[1] # ranges in m
-     # wfm[k,:]=0.5+0.5*sps.erf((edges[:-1] - offset) / (0.25*np.sqrt(2)*Hsm[k]))
-     fff = 0.5 * (  1+scipy.special.erf( xdata /(np.sqrt(2)*incognita[0])  ) ) 
-     cy= (   ((ydata - fff) **2)).sum()
+     xdata =data[3] # times in ns 
+     noise  =data[6]
+     costfun=data[8]
+     fff = noise+ 0.5 *(  1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])  ) ) 
+     if costfun=='LS':
+        cy= (   ((ydata - fff) **2)).sum()
+     else:
+        ratio = np.divide(ydata+1.e-5,fff+1.e-5) 
+        cy= ( ratio - np.log(ratio)).sum()
+
      return cy
 
-def  waveform_brown_LS(incognita,data)  :
+######################  generalized erf with groups 
+def  wf_erf4D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau)  :
+    
+     clight = 299792458
+     stonano=1000000000
+     rtot=2*stonano/clight     #Converts range to time
+     SigmaP=0.513*tau
+     sig=np.sqrt(incognita[1]**2-SigmaP**2)/rtot  
+     da=4*incognita[3]*sig*sig
+     # Matlab version: dw=exp(-(R-r).^2/(2.*sig^2)).*((R-r).^2-sig.^2)./sig.^4/sqrt(2*pi);
+     # Matlab version: dw=exp(-(R/sig-r/sig).^2/(2.)).*((R/sig-r/sig).^2-1)./sig.^2/sqrt(2*pi);
+
+     ros=(xdata-incognita[0])/(np.sqrt(2)*incognita[1])
+     ro2=(xdata-incognita[0])/(rtot*sig)
+     ro3=4*incognita[4]  # this is R0/sig 
+
+     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/sig**2/np.sqrt(2*np.pi)
+     dd=da*dw
+     
+     fff = noise+ 0.5 * (  1+sps.erf( ros  ) )+dd 
+     return fff
+
+def  wf_erf4D(incognita,data)  :
+     """
+     returns the least-square distance between the waveform data[0] and the simplest erf waveform
+     two unknown parameter: (epoch,Hs)  both in meters
+     """
+     ydata  =data[0] # Waveform
+     xdata  =data[3] # times in ns 
+     noise  =data[6]
+     tau    = data[7]
+     costfun=data[8]
+     
+     clight = 299792458
+     stonano=1000000000
+     rtot=2*stonano/clight                          #Converts range to time
+     SigmaP=0.513*tau
+     sig=np.sqrt(incognita[1]**2-SigmaP**2)/rtot  
+     da=4*incognita[3]*sig*sig
+     # Matlab version: dw=np.exp(-(R-r).^2/(2.*sig^2)).*((R-r).^2-sig.^2)./sig.^4/sqrt(2*pi);
+    
+     ros=(xdata-incognita[0])/(np.sqrt(2)*incognita[1])
+     ro2=(xdata-incognita[0])/(rtot*sig)
+     ro3=4*incognita[4]  # this is R0/sig 
+
+     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/sig**2/np.sqrt(2*np.pi)
+     dd=da*dw
+ 
+     fff = noise+ 0.5 *( 1+sps.erf( ros ) ) +  dd 
+     if costfun=='LS':
+        cy= (   ((ydata - fff) **2)).sum()
+     else:
+        ratio = np.divide(ydata+1.e-5,fff+1.e-5) 
+        cy= ( ratio - np.log(ratio)).sum()
+
+     return cy
+
+
+
+
+
+######################  Defines waveform theoretical models: brown from WHALES code 
+def  wf_brown_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau)  :
+# This is Jean's MLE 
+#A =  0.5*exp(-4*X/gamma)*sig0;
+#if ordre==1
+#    a1 = a*(1-2*X-4*X/gamma);
+#else
+#    a1= a*(1-2*X-2*X/gamma);
+#end;
+#u1 = (n - epoq-a1*sigC^2)/(sqrt(2)*sigC);
+#v1 = a1.*(n - epoq - 0.5*a1*sigC^2);
+#    modele1= A.*exp(-v1).*(1+erf(u1));
+#    modele = modele1 + Bt;
+     print(incognita[0],incognita[1])
+     fff = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
+     * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
+     *   (  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
+     )
+     return fff
+
+def  wf_brown(incognita,data)  :
      """
      returns the least-square distance between the waveform data[0] and the theoretical 
      Brown-Hayne functional form, The unknown parameters in this version (17 Dec 2013) are Epoch, Sigma and Amplitude, where 
@@ -42,86 +135,161 @@ def  waveform_brown_LS(incognita,data)  :
      Gamma =data[1]
      Zeta  =data[2]
      xdata =data[3]  #Epoch
-     SigmaP=data[4]
-     c_xi  =data[5]  #Term related to the slope of the trailing edge
-     weights=data[6]  #Weights to apply to the residuals
+     c_xi  =data[4]  #Term related to the slope of the trailing edge
+     weights=data[5]  #Weights to apply to the residuals
+     noise  =data[6]
+     costfun=data[7]
          
-     fff = ( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
+     fff = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
      * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
      *   (  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
      )
     
-     cy= (   weights *  ((ydata - fff) **2)).sum()
+     if costfun=='LS':
+        cy= (   weights *  ((ydata - fff) **2)).sum()
+     else:
+        ratio = np.divide(ydata+1.e-5,fff+1.e-5) 
+        cy= ( ratio - np.log(ratio)).sum()
      
      return cy
 
+######################
+def wf_eval(ranges,inputpar,clight,wf_model,tau=2.5,nominal_tracking_gate=30,noise=0.,alti_sat=None,mispointing=0.,theta3dB=1.):
+    stonano=1000000000
+    rtot=2*stonano/clight
+    SigmaP=0.513*tau
+    Ri=6378.1363*(10**3)      #Earth radius
 
-def  waveform_brown_ML(incognita,data)  :
-     """
-     returns the ML distance between the waveform data[0] and the theoretical 
-     Brown-Hayne functional form, The unknown parameters in this version (17 Dec 2013) are Epoch, Sigma and Amplitude, where 
-     sigma=( sqrt( (incognita(2)/(2*0.3)) ^2+SigmaP^2) ) is the rising time of the leading edge
-     
-     For the explanation of the terms in the equation, please check "Coastal Altimetry" Book
-     
-     """
-     
-     ydata =data[0] #Waveform coefficients
-     Gamma =data[1]
-     Zeta  =data[2]
-     xdata =data[3]  #Epoch
-     SigmaP=data[4]
-     c_xi  =data[5]  #Term related to the slope of the trailing edge
-     weights=data[6]  #Weights to apply to the residuals
-         
-     fff = ( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
-     * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
-     *   (  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
-     )
-     ratio = ydata/fff 
-     cy= ( ratio - np.log(ratio)).sum()
-     
-     return cy
-
-
-############# using scipy.minimize , as in WHALES #################
-
-def retracking_NM1D(wfm,edges,max_edg=25,nHs=251,alti_sat=519*1e3,\
-                                  dx=10,offset=10,wfm_ref=None,Hsm_ref=None,ispolyfit=0,isepoch=0):
-    dr = edges[1]-edges[0]
-    Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
-    wfn=wfm/Apix   # normalization: if wfm is area histogram then wfn should be in [0 1]
+    Zeta=mispointing
+    Gamma =(np.sin(theta3dB))**2/(np.log(2)*2)
+    clightn=clight/stonano
+    b_xi = np.cos (2*mispointing) - ((np.sin(2*mispointing))**2)/Gamma
+    c_xi=b_xi* ( (4/Gamma)*(clightn/alti_sat) * 1/(1+alti_sat/Ri))
+ 
+    incognita=inputpar
+    xdata=ranges*(2./clight)*stonano
+    incognita[0]= inputpar[0]*rtot+nominal_tracking_gate*tau
+    incognita[1]= np.sqrt( (inputpar[1]*0.25*rtot)**2+SigmaP**2  )
+    fff=eval(wf_model+'_eval')(xdata,incognita,noise,Gamma,Zeta,c_xi,tau)
     
-    xopt = minimize(waveform_erf, incognita, args=((wfn,edges),) ,method='Nelder-Mead',options={'disp': False})
+    return fff
+
+
+
+############# A 2-parameter retracker using scipy.minimize , as in WHALES #################
+
+def retracking_NM(wfm,times,rtot,wf_fun,Gamma=1.,Zeta=0.,c_xi=0.,weights=1.,noise=0.,tau=2.5,costfun='LS',nominal_tracking_time=64*2.5,method='Nelder-Mead'):
+
+    Pu=None
+    da=None
+    R0=None 
+    if wf_fun =='wf_erf2D':
+       incognita=np.array([nominal_tracking_time,10.0*rtot]) # initial conditions: could use previous waveform ... 
+    elif wf_fun =='wf_brown':
+      incognita=np.array([nominal_tracking_time,10.0*rtot,1e-6]) # initial conditions: could use previous waveform ... 
+    elif wf_fun =='wf_erf4D':
+      incognita=np.array([nominal_tracking_time,10.0*rtot,1e-6,0,0]) # initial conditions: could use previous waveform ... 
+
+    xopt = minimize(eval(wf_fun), incognita, args=((wfm,Gamma,Zeta,times,c_xi,weights,noise,tau,costfun),),\
+                    method=method,options={'disp': False})
+# bounds=((-4*rtot,4*rtot),(0.0,2.5*rtot)),
     x=xopt.x
     if xopt.success == True:
-       Hs=x[0]
-       dist=waveform_erf(x,((wfn),(edges)))
-       
-    return Hs, dist
+       Sigma=x[1]
+       epoch=x[0]
+       if wf_fun =='wf_brown':
+          Pu=x[2]
+       if wf_fun =='wf_erf4D':
+          da=x[3]
+          R0=x[4]
+       dist=eval(wf_fun)(x,((wfm),Gamma,Zeta,(times),c_xi,weights,noise,tau,costfun))
+    else:
+       Sigma=-0.1
+       epoch=-1.
+       dist=-1.
+    return Sigma, epoch, Pu, da, R0, dist
 
-
-#     incognita=initial_conditions
-        
-#        c=3.0*(10**8) #Light speed
-#        H=altitude
-#        Ri=6378.1363*(10**3) #Earth radius
-
-#        Gamma=0.5 * (1/math.log(2))*np.sin(Theta)*np.sin(Theta) # antenna beamwidth parameter
-     
-#        b_xi = np.cos (2*Zeta) - ((np.sin(2*Zeta))**2)/Gamma
-#        a=( (4/Gamma)*(c/H) * 1/(1+H/Ri))
-#        c_xi=b_xi* ( (4/Gamma)*(c/H) * 1/(1+H/Ri))
+############# A 2-parameter pyramid grid search #################
+def retracking_pyramid2(wfm,times,rtot,wf_fun,Gamma=1.,Zeta=0.,c_xi=0.,weights=1.,noise=0.,tau=2.5,costfun='LS',nominal_tracking_time=64*2.5):
+    nsteps=10
+    a0=0.0+nominal_tracking_time
+    a1=5.0*rtot
+    b0=2.0*rtot
+    b1=2.5*rtot
     
-#        a=a/1000000000 #/ns
-#        c_xi=c_xi/1000000000 #1/ns
+    for istep in range(nsteps):
+        dist=np.zeros((5,5))
+        for i0 in range(5):
+           for i1 in range(5):
+# Note that 9 out of 25 have already been computed at the previous step ... 
+              incognita=np.array([a0+(i0-2)*b0,a1+(i1-2)*b1])
+              dist[i0,i1]=eval(wf_fun)(incognita,(wfm,Gamma,Zeta,times,c_xi,weights,noise,tau,costfun)) 
+              #print('      inds:',i0,i1,incognita,dist[i0,i1])       
+    
+        i0min,i1min = np.unravel_index(np.nanargmin(dist,axis=None),dist.shape)
+        epoch=a0+(i0min-2)*b0              
+        Sigma=a1+(i1min-2)*b1  
+        dmin =dist[i0min,i1min] 
+# Update of search interval ... 
+        a0=a0+(i0min-2)*b0
+        a1=a1+(i1min-2)*b1
+        b0=b0/2.
+        b1=b1/2.
+        #print('step:',istep,epoch,Hs,dmin)       
+    return Sigma, epoch, dmin
+
+
+############# A 4-parameter pyramid grid search #################
+def retracking_pyramid4(wfm,times,rtot,wf_fun,Gamma=1.,Zeta=0.,c_xi=0.,weights=1.,noise=0.,tau=2.5,costfun='LS',nominal_tracking_time=64*2.5):
+    nsteps=10
+    a0=0.0+nominal_tracking_time
+    a1=5.0*rtot
+    b0=2.0*rtot
+    b1=2.5*rtot
+    a2=0.2
+    b2=0.1  # normalized waveform pertubation 
+    a3=0.4
+    b3=0.1  # factor 4 otherwise we get negative R0/Hs ... 
+
+    Pu=1.0
+    
+    for istep in range(nsteps):
+        dist=np.zeros((5,5,5,5))
+        for i0 in range(5):
+         for i1 in range(5):
+          for i2 in range(5):
+           for i3 in range(5):
+# Note that 9 out of 25 have already been computed at the previous step ... 
+              incognita=np.array([a0+(i0-2)*b0,a1+(i1-2)*b1,0,a2+(i2-2)*b2,a3+(i3-2)*b3])
+              dist[i0,i1,i2,i3]=eval(wf_fun)(incognita,(wfm,Gamma,Zeta,times,c_xi,weights,noise,tau,costfun)) 
+              #print('      inds:',i0,i1,incognita,dist[i0,i1])       
+    
+        i0min,i1min,i2min,i3min = np.unravel_index(np.nanargmin(dist,axis=None),dist.shape)
+        epoch=a0+(i0min-2)*b0              
+        Sigma=a1+(i1min-2)*b1  
+        da   =a2+(i2min-2)*b2  
+        R0   =a3+(i3min-2)*b3  
+        dmin =dist[i0min,i1min,i2min,i3min] 
+# Update of search interval ... 
+        a0=a0+(i0min-2)*b0
+        a1=a1+(i1min-2)*b1
+        a2=a2+(i2min-2)*b2
+        a3=a3+(i3min-2)*b3
+        b0=b0/2.
+        b1=b1/2.
+        b2=b2/2.
+        b3=b3/2.
+        print('step:',istep,i2min,i3min,Sigma, epoch, Pu, da, R0, dmin)       
+    return Sigma, epoch, Pu, da, R0, dmin
+
+
+
 
 ############# 1D erf waveforms ####################################
 
-def simple_retracking_process_v01(wfm,edges,max_edg=25,nHs=251,alti_sat=519*1e3,\
-                                  dx=10,offset=10,wfm_ref=None,Hsm_ref=None,ispolyfit=0,isepoch=0):
+def simple_retracking_process_v01(wfm,edges,max_edg=25,nHs=251,\
+                                  offset=10,wfm_ref=None,Hsm_ref=None,ispolyfit=0,isepoch=0):
     dr = edges[1]-edges[0]
-    Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
     if isepoch:
         max_asymptote = np.mean(wfm[max_edg-2:max_edg+4])
         semiH = np.argmin(np.abs(wfm[0:max_edg]-(max_asymptote/2)))
@@ -139,10 +307,10 @@ def simple_retracking_process_v01(wfm,edges,max_edg=25,nHs=251,alti_sat=519*1e3,
             testwfm0=wfm
         
         testwf=np.broadcast_to(testwfm0,(nHs,len(testwfm0)))
-        dist=np.sum((Apix*wfm_ref[:,0:max_edg]-testwf[:,0:max_edg])**2,axis=1)
+        dist=np.sum((wfm_ref[:,0:max_edg]-testwf[:,0:max_edg])**2,axis=1)
     else:
         testwf=np.broadcast_to(wfm,(nHs,len(wfm)))
-        dist=np.sum((Apix*wfm_ref[:,0:max_edg]-testwf[:,0:max_edg])**2,axis=1)
+        dist=np.sum((wfm_ref[:,0:max_edg]-testwf[:,0:max_edg])**2,axis=1)
 
     if ispolyfit:
         p = np.polyfit(Hsm_ref,dist,2)
@@ -173,7 +341,75 @@ def generate_wvform_database(nHs,dr=None,ne=None,bandwidth=320*1e6,\
         wfm[k,:]=0.5+0.5*sps.erf((edges[:-1] - offset) / (0.25*np.sqrt(2)*Hsm[k]))
 
     return wfm, Hsm, edges,dr   
+
+##################################
+def retrack_waveforms(waveforms,ranges,max_range_fit,clight,mispointing=0.,theta3dB=1., min_range_fit=0, wfm_ref=None,Hsm_ref=None,ze_ref=None,\
+                      min_method='gridsearch',wf_model='erf2D',costfun='LS',alti_sat=519*1e3,Theta=1.,tau=2.5,nominal_tracking_gate=30):
+    #############################
+    #  tau : duration of range gate in nsec 
+    nxw,nyw,nr=np.shape(waveforms)
     
+    print('size of waveforms array:',nxw,nyw,nr)
+    Ri=6378.1363*(10**3)      #Earth radius
+    stonano=1000000000
+    rtot=(2./clight)*stonano  #Converts range to time
+
+    times=ranges*rtot
+    timeshift=tau*nominal_tracking_gate
+    Hs_r=np.zeros((nxw,nyw))
+    ze_r=np.zeros((nxw,nyw))
+    Pu_r=np.zeros((nxw,nyw))+1.0
+    da_r=np.zeros((nxw,nyw))
+    R0_r=np.zeros((nxw,nyw))
+    di_r=np.zeros((nxw,nyw))
+    SigmaP=0.513*tau
+    Gamma =(np.sin(theta3dB))**2/(np.log(2)*2)
+    clightn=clight/stonano
+    in1=nominal_tracking_gate-40
+    in2=nominal_tracking_gate-30
+    noise=np.median(np.mean(waveforms[:,:,in1:in2],axis=2))
+    if len(mispointing)<2:
+       mispointing=mispointing+np.zeros((nxw,nyw))
+    
+
+    for ix in range(nxw):
+        print('Retracking waveforms',ix,' out of ',nxw,' ------------ ')
+        for iy in range(nyw):
+            wfm=waveforms[ix,iy,:]
+            b_xi = np.cos (2*mispointing[ix,iy]) - ((np.sin(2*mispointing[ix,iy]))**2)/Gamma
+            c_xi=b_xi* ( (4/Gamma)*(clightn/alti_sat) * 1/(1+alti_sat/Ri))
+            if min_method == 'gridsearch':
+               Sigma,t0,di_r[ix,iy]=simple_retracking_process_2params(wfm,\
+                                  max_edg=max_range_fit,nHs=250,nze=251,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ze_ref=ze_ref,costfun=costfun)
+            elif min_method in [ 'Nelder-Mead','Newton-CG']:
+               Sigma,t0,Pu_r[ix,iy],da_r[ix,iy],R0_r[ix,iy],di_r[ix,iy]=retracking_NM(wfm[min_range_fit:max_range_fit],\
+                                                              times[min_range_fit:max_range_fit],rtot,wf_model,noise=noise,tau=tau, Gamma=Gamma,Zeta=mispointing[ix,iy], \
+                                                              c_xi=c_xi,nominal_tracking_time=timeshift,method=min_method,costfun=costfun)
+            elif min_method == 'pyramid2':
+               Sigma,t0,di_r[ix,iy]=retracking_pyramid2(wfm[min_range_fit:max_range_fit],\
+                                                              times[min_range_fit:max_range_fit],rtot,wf_model,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
+                                                              c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun)
+            elif min_method == 'pyramid4':
+              Sigma,t0,Pu_r[ix,iy],da_r[ix,iy],R0_r[ix,iy],di_r[ix,iy]=retracking_pyramid4(wfm[min_range_fit:max_range_fit],\
+                                                              times[min_range_fit:max_range_fit],rtot,wf_model,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
+                                                              c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun)
+      
+            if Sigma >= 0:
+               sigma_squared=( Sigma**2- SigmaP**2 )
+               if sigma_squared>=0 :    
+                  Hs_r[ix,iy]=np.sqrt(sigma_squared)*4/rtot
+               else:
+                  Hs_r[ix,iy]=0.
+
+            Epoch=t0 - nominal_tracking_gate*tau;  
+            ze_r[ix,iy]=Epoch/rtot  #m conversion from ns to meters
+            #print('fit:',ix,iy,Sigma,SigmaP,SWH_squared,Hs_r[ix,iy])
+            #print('tau:',tau,t0,t0 - nominal_tracking_gate*tau,ze_r[ix,iy])
+            #print('da:',da_r[ix,iy],R0_r[ix,iy])
+          
+    return Hs_r,ze_r,Pu_r,da_r,R0_r,di_r
+    
+##################################
 def fly_over_track_only_retrack(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edges_ref,range_shift=10,\
                        alti_sat=519000,isepoch = 0):
     # ----- nxa0 : is the first offset --------------
@@ -198,6 +434,9 @@ def fly_over_track_only_retrack(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edges_r
     rlim = np.sqrt((radi0/2)**2+(alti_sat)**2)-alti_sat+range_shift
     max_edg=np.argmax(edges_ref[edges_ref<=rlim])
     
+    dr = edges_ref[1]-edges_ref[0]
+    Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
+
     for isampx in range(nsamp):
         print('------------ ',isampx,' over ',nsamp-1,' ------------ ')
         for isampy in range(nsamp-1):
@@ -211,11 +450,11 @@ def fly_over_track_only_retrack(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edges_r
             # --- to have distance to satellite = range -------------------
             r=np.sqrt(Xa0**2+Ya0**2+(alti_sat-surf1)**2)-alti_sat+range_shift
             counts,_=np.histogram(r,bins=edges_ref)
-            Hs_retrack[isampx,isampy],ind_retrack[isampx,isampy],dist[isampx,isampy,:] = simple_retracking_process_v01(counts,edges_ref,max_edg=max_edg,
-                                                                            dx=dx,nHs=nHs, wfm_ref=wfm_ref,
-                                                                            offset = range_shift,Hsm_ref=Hsm_ref,
-                                                                            alti_sat=alti_sat,isepoch=isepoch)
-            waveforms[isampx,isampy,:]=counts
+            waveform=counts/Apix
+    
+            Hs_retrack[isampx,isampy],ind_retrack[isampx,isampy],dist[isampx,isampy,:] = simple_retracking_process_v01(waveform,edges_ref,max_edg=max_edg,nHs=nHs, wfm_ref=wfm_ref,
+                                                                            offset = range_shift,Hsm_ref=Hsm_ref,isepoch=isepoch)
+            waveforms[isampx,isampy,:]=waveform
 
         
     return Hs_retrack,Xalt,Yalt,waveforms,dist
@@ -268,30 +507,34 @@ def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,radi1,r
            r=np.sqrt(Xa**2+Ya**2+(alti_sat-surf)**2)-alti_sat+range_shift
            r[dist_ground > radi**2]=np.nan  # equivalent to multiplication by footprint
 
+           dr = edges_ref[1]-edges_ref[0]
+           Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
            counts,_=np.histogram(r,bins=edges_ref)
+           waveform=counts/Apix
 #	   Hs_retrack[isamp]             = simple_retracking_process   (counts,edges_ref,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ispolyfit=0) 
-           Hs_retrack[isamp],ind_retrack[isamp],dist[isamp] =simple_retracking_process_v01(counts,edges_ref,max_edg=25,nHs=251,alti_sat=519*1e3,\
-                                  dx=10,offset=10,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ispolyfit=0,isepoch=0)
-           waveforms[isamp,:]=counts
+           Hs_retrack[isamp],ind_retrack[isamp],dist[isamp] =simple_retracking_process_v01(waveform,edges_ref,max_edg=25,nHs=251,\
+                                  offset=10,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ispolyfit=0,isepoch=0)
+           waveforms[isamp,:]=waveform
 
 #def simple_retracking_process_v01(wfm,edges,max_edg=25,nHs=251,alti_sat=519*1e3,\
 #                                  dx=10,offset=10,wfm_ref=None,Hsm_ref=None,ispolyfit=0,isepoch=0):
 
 
-        return Hs_std,Hs_stdbis,Hs_std2,Hs_retrack,Xalt,waveforms,surf1,footprint1
+        return Hs_std,Hs_stdbis,Hs_std2,Hs_retrack,ind_retrack,Xalt,waveforms,surf1,footprint1
 
 
 ############# 2D erf waveforms ####################################"
 
-def simple_retracking_process_2params(wfm,edges,max_edg=25,nHs=251,nze=250,alti_sat=519*1e3,\
-                                  dx=10,wfm_ref=None,Hsm_ref=None,ze_ref=None):
-    dr = edges[1]-edges[0]
-    Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
+def simple_retracking_process_2params(wfm,edges=None,max_edg=25,nHs=251,nze=250,\
+                                  wfm_ref=None,Hsm_ref=None,ze_ref=None,costfun='LS'):
     
     testwf=np.broadcast_to(wfm,(nHs,nze,len(wfm)))
 #     print('testwf shape = ',testwf.shape,' , wfm shape = ',wfm_ref.shape)
-    dist=np.sum((Apix*wfm_ref[:,:,0:max_edg]-testwf[:,:,0:max_edg])**2,axis=-1)
-    
+    if costfun=='LS':
+       dist=np.sum((wfm_ref[:,:,0:max_edg]-testwf[:,:,0:max_edg])**2,axis=-1)
+    else:
+       ratio = testwf[:,:,12:max_edg]/wfm_ref[:,:,12:max_edg] 
+       dist=np.sum( ratio - np.log(ratio),axis=-1)
 #     print(np.sum(np.isnan(dist)),' / ',dist.size)
     
     hmin,zemin = np.unravel_index(np.nanargmin(dist,axis=None),dist.shape)
@@ -301,6 +544,7 @@ def simple_retracking_process_2params(wfm,edges,max_edg=25,nHs=251,nze=250,alti_
 
     return Hs, ze, dist[hmin,zemin]
 
+##########################################
 def generate_wvform_database_2D(nHs,nze,dr=None,ne=None,bandwidth=320*1e6,\
                              edges_max=25,Hs_max=25,ze_max=1,offset=10):
     if (dr is None)&(ne is None):
@@ -319,12 +563,11 @@ def generate_wvform_database_2D(nHs,nze,dr=None,ne=None,bandwidth=320*1e6,\
 
     for k in range(nHs):
         for ize, ze in enumerate(zem):
-#             wfm[k,ize,:]=0.5+0.5*sps.erf((edges[:-1]+ze+0.5*dr-offset) / (0.25*np.sqrt(2)*Hsm[k]))
             wfm[k,ize,:]=0.5+0.5*sps.erf(((edges[:-1]+ze) - offset) / (0.25*np.sqrt(2)*Hsm[k]))
 
     return wfm, Hsm, zem, edges, dr   
 
-############################################
+##########################################
 def fly_over_track_only_retrack_2D(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edges_ref,ze_ref,range_shift=10,\
                        alti_sat=519*1e3):
     # ----- nxa0 : is the first offset --------------
@@ -349,6 +592,11 @@ def fly_over_track_only_retrack_2D(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edge
     radi0 = nxa*dx
     rlim = np.sqrt((radi0/2)**2+(alti_sat)**2)-alti_sat+range_shift
     max_edg=np.argmax(edges_ref[edges_ref<=rlim])
+    #print('size :',max_edg,len(edges_ref))
+    dr = edges_ref[1]-edges_ref[0]
+    dr2 = 0.5*dr
+    Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
+
     
     for isampx in range(nsamp):
         print('------------ ',isampx,' over ',nsamp-1,' ------------ ')
@@ -362,19 +610,87 @@ def fly_over_track_only_retrack_2D(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edge
             surf1 = S1[ialty-nxa:ialty+nxa+1,ialtx-nxa:ialtx+nxa+1]
             # --- to have distance to satellite = range -------------------
             r=np.sqrt(Xa0**2+Ya0**2+(alti_sat-surf1)**2)-alti_sat+range_shift
+            #print(isampx,isampy,ialtx,ialty,np.max(r),np.min(r))
+
             # --- histogram counts the number of data points between edges ...
             #     modified by FA to center the bins on the edges.  
-            dr2 = 0.5*(edges_ref[1]-edges_ref[2])
-            counts,_=np.histogram(r,bins=edges_ref+dr2)
+            counts,_=np.histogram(r,bins=edges_ref-dr2)
+            waveform=counts/Apix
             Hs_retrack[isampx,isampy],ze_retrack[isampx,isampy],dist[isampx,isampy] = \
-                                    simple_retracking_process_2params(counts,edges_ref,max_edg=max_edg,
-                                                                    dx=dx,nHs=nHs,nze=nze, wfm_ref=wfm_ref,
-                                                                    ze_ref=ze_ref,Hsm_ref=Hsm_ref,
-                                                                    alti_sat=alti_sat)
-            waveforms[isampx,isampy,:]=counts
+                                    simple_retracking_process_2params(waveform,edges_ref,max_edg=max_edg,
+                                                                    nHs=nHs,nze=nze, wfm_ref=wfm_ref,
+                                                                    ze_ref=ze_ref,Hsm_ref=Hsm_ref)
+            waveforms[isampx,isampy,:]=waveform
 #             print(Hs_retrack[isampx,isampy],ze_retrack[isampx,isampy],dist[isampx,isampy])
 
         
     return Hs_retrack,ze_retrack,Xalt,Yalt,waveforms,dist
+
+######### compute simulated waveforms #####################################
+def simu_waveform_erf(X,Y,S1,nsampx,nsampy,nxa0,nxa,di,ranges,range_offset=10,\
+                       alti_sat=519*1e3,Gamma=1.):
+#
+#  WARNING: RIGHT NOW THIS IS A FLAT EARTH APPROXIMATION ... 
+#
+#  input parameters:
+#                   X,Y,S1         : x and y position 
+#                   nxa0           : is the first offset, keep away from boundary
+#                   nxa            : chelton diam 
+#                   ranges         : center value of the discrete ranges  
+#                  
+
+#  input parameters: maybe put some of this back. 
+#          radi        : radius over which waveform is computed
+#          radi1, radi2: are 2 different radii used to compute std(elevation) 
+#
+    Xalt = np.zeros((nsampx))
+    Yalt = np.zeros((nsampy))
+
+    Hs_retrack = np.zeros((nsampx,nsampy))
+    ze_retrack = np.zeros((nsampx,nsampy))
+    waveforms=np.zeros((nsampx,nsampy,len(ranges)-1))
+                    
+    dx = X[1]-X[0]
+    dy = Y[1]-Y[0]
+    ny=len(Y)
+    stepy=1
+    shifty1=0
+    Ri=6378.1363*(10**3) #Earth radius
+      
+    # --- Footprint definition For std(surface) --------------------
+    [Xa0,Ya0]=np.meshgrid(dx*np.arange(-nxa,nxa+1), dy*np.arange(-nxa,nxa+1))
+    dist_ground = (Xa0**2+Ya0**2)
+    
+    dr = ranges[1]-ranges[0]
+    dr2 = 0.5*dr
+    Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
+
+    r2=Xa0**2+Ya0**2
+    power=np.exp(-4*(r2/alti_sat**2)*(1+alti_sat/Ri)/Gamma) 
+            
+    for isampx in range(nsampx):
+        if nsampy > 1:
+           print('Generating waveform',isampx,' over ',nsampx,' ------------ ')
+        else:
+           shifty1=ny/2-nxa0
+           stepy=0
+        for isampy in range(nsampy):
+            ialtx=(nxa0+isampx*di).astype(int)
+            ialty=(nxa0+isampy*di*stepy+shifty1).astype(int)
+            Xalt[isampx] = X[ialtx]
+            Yalt[isampy] = Y[ialty]
+             
+            # --- get surface extract for altimeter ---------------------------
+            surf1 = S1[ialty-nxa:ialty+nxa+1,ialtx-nxa:ialtx+nxa+1]
+            # --- to have distance to satellite = range -------------------
+            r=np.sqrt(r2+(alti_sat-surf1)**2)-alti_sat+range_offset
+            #print(isampx,isampy,ialtx,ialty,np.max(r),np.min(r))
+            # --- histogram counts the number of data points between edges ...
+            #     modified by FA to center the range values
+            counts,_=np.histogram(r,bins=ranges-dr2,weights=power)
+            waveform=counts/Apix
+            waveforms[isampx,isampy,:]=waveform
+    return Xalt,Yalt,waveforms
+
 
 
