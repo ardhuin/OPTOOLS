@@ -6,6 +6,7 @@
 import glob
 import os
 import sys
+import pathlib
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -13,27 +14,31 @@ import matplotlib.text as mtext
 import matplotlib.colors as mcolors
 import matplotlib as mpl
 import matplotlib.cm as cmx
+from matplotlib.legend_handler import HandlerLineCollection
+from matplotlib.lines import Line2D
 
 # to interpolate values
-import scipy.interpolate as spi
+
 import numpy as np
 import netCDF4 as nc
 import xarray as xr
-import pandas as pd
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 
 import datetime as dt
+prop_cycle = plt.rcParams['axes.prop_cycle']
+colors = prop_cycle.by_key()['color']
+twopi = 2*np.pi
 
-import geopandas
 
 mpl.rcParams.update({'font.size': 18,'savefig.facecolor':'white'})
 
 ## - Define class LegendTitle to have subtitles in Legend
+## - Define class HandlerColumnLines to have multiple lines in 1 column as legend entry
+## - py_files(PATH, suffix='.nc')
 ## - get_rolling_values(x,kernel_size)
 ## - get_scattering_info(x,kernel_size,type_metric=0)
 ## - filter_big_change_from_ref(X,Xref,thresh)
 ## - haversine(lat1, lon1, lat2, lon2)
+## - crosses_land(disttocoast,lat1, lon1, lat2, lon2)
 ## - interpolate_along_track(lon_mod,lat_mod,field_mod,lon_obs,lat_obs) 
 ## - get_contour(X_array,Y_array)
 ## - copy_NCfile(originalfile,targetfile,isdebug)
@@ -46,7 +51,7 @@ mpl.rcParams.update({'font.size': 18,'savefig.facecolor':'white'})
 '''
 - read_offnadir_files(filenames):  Function that reads the offnadir files and appends the results outputs: time_swim,lat_offnadir,lon_offnadir,phi,phi_geo,seg_lat,seg_lon,modulation_spectra,fluctuation_spectra,wave_spectra,klin,inci,seg_inci,kwave,dk
 - read_nadir_data(filename):time_alti0, lat_alti0, lon_alti0, swh_alti0: all values along track
-#			- time_alti, lat_alti, lon_alti, swh_alti: filtered values (by availability)
+#            - time_alti, lat_alti, lon_alti, swh_alti: filtered values (by availability)
 - read_nadir_data_wind(filename): reads one nadir file at 5 Hz (native)
 - read_nadir_data_wind_1_5Hz(filename): time_alti0,lat_alti0,lon_alti0,swh_alti_1hz0,wind_alti_1hz0,swh_alti_5hz0,wind_alti_5hz0,time_alti,lat_alti,lon_alti,swh_alti_1hz,wind_alti_1hz,swh_alti_5hz,wind_alti_5hz
 
@@ -66,16 +71,69 @@ mpl.rcParams.update({'font.size': 18,'savefig.facecolor':'white'})
 # --------------------------------------------------------------------------------
 # -- class LegendTitle to have subtitles in Legend
 class LegendTitle(object):
-	def __init__(self, text_props=None):
-		self.text_props = text_props or {}
-		super(LegendTitle, self).__init__()
-	
-	def legend_artist(self, legend, orig_handle, fontsize, handlebox):
-		x0, y0 = handlebox.xdescent, handlebox.ydescent
-		title = mtext.Text(x0, y0, r'\textbf{' + orig_handle + '}', usetex=True, **self.text_props)
-		handlebox.add_artist(title)
-		return title
+    def __init__(self, text_props=None):
+        self.text_props = text_props or {}
+        super(LegendTitle, self).__init__()
+    
+    def legend_artist(self, legend, orig_handle, fontsize, handlebox):
+        x0, y0 = handlebox.xdescent, handlebox.ydescent
+        title = mtext.Text(x0, y0, r'\textbf{' + orig_handle + '}', usetex=True, **self.text_props)
+        handlebox.add_artist(title)
+        return title
 
+# --------------------------------------------------------------------------------
+# -- class HandlerColumnLines to have multilines as column in Legend
+class HandlerColumnLines(HandlerLineCollection):
+    """
+    Custom Handler for LineCollection instances.
+    """
+    def create_artists(self, legend, orig_handle,
+                       xdescent, ydescent, width, height, fontsize, trans):
+        # figure out how many lines there are
+        numlines = len(orig_handle.get_segments())
+        xdata, xdata_marker = self.get_xdata(legend, xdescent, ydescent,
+                                             width, height, fontsize)
+        leglines = []
+        # divide the vertical space where the lines will go
+        # into equal parts based on the number of lines
+        ydata = np.full_like(xdata, height / (numlines + 1))
+        # for each line, create the line at the proper location
+        # and set the dash pattern
+        for i in range(numlines):
+            legline = Line2D(xdata, ydata * (numlines - i) - ydescent)
+            self.update_prop(legline, orig_handle, legend)
+            # set color, dash pattern, and linewidth to that
+            # of the lines in linecollection
+            try:
+                color = orig_handle.get_colors()[i]
+            except IndexError:
+                color = orig_handle.get_colors()[0]
+            try:
+                dashes = orig_handle.get_dashes()[i]
+            except IndexError:
+                dashes = orig_handle.get_dashes()[0]
+            try:
+                lw = orig_handle.get_linewidths()[i]
+            except IndexError:
+                lw = orig_handle.get_linewidths()[0]
+            lw=1
+            if dashes[1] is not None:
+                legline.set_dashes(dashes[1])
+            else:
+                legline.set_dashes('')
+            legline.set_color(color)
+            legline.set_transform(trans)
+            legline.set_linewidth(lw)
+            leglines.append(legline)
+        return leglines
+
+def py_files(root,suffix='.nc'): 
+    """Recursively iterate all the .nc files in the root directory and below""" 
+    for path, dirs, files in os.walk(root):
+        if suffix[0]=='.':
+            yield from (os.path.join(path, file) for file in files if pathlib.Path(file).suffix == suffix)
+        else:
+            yield from (os.path.join(path, file) for file in files if file[-len(suffix):] == suffix)
 
 # --------------------------------------------------------------------------------
 # --- 1. Get values for a rolling windows ----------------------------------------
@@ -129,35 +187,103 @@ def filter_big_change_from_ref(X,Xref,thresh):
 # inputs : lat1, lon1, lat2, lon2
 # outputs: distance between the 2points in km
 def haversine(lat1, lon1, lat2, lon2):
-	# This code is contributed
-	# by ChitraNayal
-	# from https://www.geeksforgeeks.org/haversine-formula-to-find-distance-between-two-points-on-a-sphere/
-	# distance between latitudes
-	# and longitudes
-	dLat = (lat2 - lat1) * np.pi / 180.0
-	dLon = (lon2 - lon1) * np.pi / 180.0
-	
-	# convert to radians
-	lat1 = lat1 * np.pi / 180.0
-	lat2 = lat2 * np.pi / 180.0
-	
-	# apply formulae
-	a = (pow(np.sin(dLat / 2), 2) +
-	     pow(np.sin(dLon / 2), 2) *
-	         np.cos(lat1) * np.cos(lat2));
-	
-	rad = 6371
-	c = 2 * np.arcsin(np.sqrt(a))
-	return rad * c	    
+    ''' This code is contributed by ChitraNayal from https://www.geeksforgeeks.org/haversine-formula-to-find-distance-between-two-points-on-a-sphere/
+    distance between latitudes and longitudes (in km) '''
+    dLat = (lat2 - lat1) * np.pi / 180.0
+    dLon = (lon2 - lon1) * np.pi / 180.0
+    
+    # convert to radians
+    lat1 = lat1 * np.pi / 180.0
+    lat2 = lat2 * np.pi / 180.0
+    
+    # apply formulae
+    a = (pow(np.sin(dLat / 2), 2) +
+         pow(np.sin(dLon / 2), 2) *
+             np.cos(lat1) * np.cos(lat2));
+    
+    rad = 6371
+    c = 2 * np.arcsin(np.sqrt(a))
+    return rad * c        
+
+# -- function CROSSES_LAND ------------------------
+def crosses_land(disttocoast,lat1s,lon1s,lat2s,lon2s,Num_steps=250,is2D=1):
+    ''' Function to determine if there is a continent between 2 points.
+    with disttocoast obtained from \n 
+    disttocoast = xr.open_dataarray('/home1/datahome/mdecarlo/Python_functions/distance2coast.nc')
+    '''
+    import cartopy.geodesic as cgeo
+    if type(lon1s)!=np.ndarray:
+        lon1s = np.array(lon1s).reshape(-1)
+    if type(lat1s)!=np.ndarray:
+        lat1s = np.array(lat1s).reshape(-1)    
+    if type(lon2s)!=np.ndarray:
+        lon2s = np.array(lon2s).reshape(-1)
+    if type(lat2s)!=np.ndarray:
+        lat2s = np.array(lat2s).reshape(-1)
+           
+    if (len(lat1s)>1)&(len(lat2s)>1):
+        if len(lat1s) == len(lat2s):
+            print('Considering pairs of points')
+        else:
+            print('Error : lat1s and lat2s should be same size or one should be scalar')
+            return
+    elif (len(lat1s)>1)&(len(lat2s)==1):
+        lat2s = np.full_like(lat1s,lat2s)
+        lon2s = np.full_like(lat1s,lon2s)
+    elif (len(lat2s)>1)&(len(lat1s)==1):
+        lat1s = np.full_like(lat2s,lat1s)
+        lon1s = np.full_like(lat2s,lon1s)
+    else:
+        lat1s = np.array(lat1s).reshape(1)
+        lat2s = np.array(lat2s).reshape(1)
+        lon1s = np.array(lon1s).reshape(1)
+        lon2s = np.array(lon2s).reshape(1)
+        
+    if is2D:
+        lons2_v1 = np.where((lon1s-lon2s)>180,lon2s+360,lon2s)
+        lons1_v1 = np.where((lon1s-lons2_v1)<-180,lon1s+360,lon1s)
+        lons = np.linspace(lons1_v1,lons2_v1,Num_steps)
+        lats = np.linspace(lat1s,lat2s,Num_steps)
+        
+        lonxx = xr.DataArray((lons+180)%360-180, dims=("llx","np"), coords={"llx":np.arange(Num_steps)})
+        latxx = xr.DataArray(lats, dims=("llx","np"), coords={"llx":np.arange(Num_steps)})
+        
+        tointer = xr.Dataset({'lon': lonxx,'lat': latxx})
+        
+        D = disttocoast.interp(lon=tointer.lon,lat=tointer.lat,kwargs={'fill_value':0}).data
+        isCrossLand = np.any(np.isnan(D),axis=0)
+    else:
+        isCrossLand = np.zeros(np.shape(lat1s),dtype=np.bool)
+        for ia, lat1 in enumerate(lat1s):
+            lon1 = lon1s[ia]
+            lon2 = lon2s[ia]
+            lat2 = lat2s[ia]
+            if (lon1-lon2)>180:
+                lon2 = lon2 + 360
+            elif (lon1-lon2)<-180:
+                lon1 = lon1 + 360
+                
+            lons = np.linspace(lon1,lon2,Num_steps)
+            lats = np.linspace(lat1,lat2,Num_steps)
+
+            lonxx = xr.DataArray((lons+180)%360-180, dims=("llx"), coords={"llx":np.arange(Num_steps)})
+            latxx = xr.DataArray(lats, dims=("llx"), coords={"llx":np.arange(Num_steps)})
+
+            tointer = xr.Dataset({'lon': lonxx,'lat': latxx})
+
+            D = disttocoast.interp(lon=tointer.lon,lat=tointer.lat,kwargs={'fill_value':np.nan}).data
+            isCrossLand[ia] = np.any(np.isnan(D))
+    return isCrossLand,D,tointer
 
 # ---  Linear ND Interpolator -----------------------------------------------
 def interpolate_along_track(lon_mod,lat_mod,field_mod,lon_obs,lat_obs):
 #  np.shape(field_mod)=(len(lat_mod),len(lon_mod))
-	x, y = np.meshgrid(lon_mod, lat_mod)
-	hs_interp = spi.LinearNDInterpolator(((x.flatten(),y.flatten())),field_mod.flatten())
-	field_interp = hs_interp(lon_obs,lat_obs)
-	
-	return field_interp
+    import scipy.interpolate as spi
+    x, y = np.meshgrid(lon_mod, lat_mod)
+    hs_interp = spi.LinearNDInterpolator(((x.flatten(),y.flatten())),field_mod.flatten())
+    field_interp = hs_interp(lon_obs,lat_obs)
+    
+    return field_interp
 
 def compute_dB(P,P0=10**-12):
     return 10*np.log10(P/P0)   
@@ -166,134 +292,103 @@ def compute_dB(P,P0=10**-12):
 # inputs : X_array,Y_array : 2D arrays which contours need to be extracted
 # outputs: X_bound,Y_bound
 def get_contour(X_array,Y_array):
-	X_bound = np.zeros(2*np.size(X_array,0)+2*np.size(X_array,1))
-	Y_bound = np.zeros(2*np.size(Y_array,0)+2*np.size(Y_array,1))
-	
-	count0 = np.size(X_array,0)
-	X_bound[0:count0]=X_array[:,0]
-	count1 = count0+np.size(X_array,1)
-	X_bound[count0:count1]=X_array[-1,:]
-	count0 = count1
-	count1 = count1 + np.size(X_array,0)
-	X_bound[count0:count1]=X_array[-1::-1,-1]
-	count0 = count1
-	count1 = count1 + np.size(X_array,1)
-	X_bound[count0:count1]=X_array[0,-1::-1]
-	
-	count0 = np.size(Y_array,0)
-	Y_bound[0:count0]= Y_array[:,0]
-	count1 = count0+np.size(Y_array,1)
-	Y_bound[count0:count1]=Y_array[-1,:]
-	count0 = count1
-	count1 = count1 + np.size(Y_array,0)
-	Y_bound[count0:count1]=Y_array[-1::-1,-1]
-	count0 = count1
-	count1 = count1 + np.size(Y_array,1)
-	Y_bound[count0:count1]=Y_array[0,-1::-1]
-	
-	return X_bound,Y_bound 
+    X_bound = np.zeros(2*np.size(X_array,0)+2*np.size(X_array,1))
+    Y_bound = np.zeros(2*np.size(Y_array,0)+2*np.size(Y_array,1))
+    
+    count0 = np.size(X_array,0)
+    X_bound[0:count0]=X_array[:,0]
+    count1 = count0+np.size(X_array,1)
+    X_bound[count0:count1]=X_array[-1,:]
+    count0 = count1
+    count1 = count1 + np.size(X_array,0)
+    X_bound[count0:count1]=X_array[-1::-1,-1]
+    count0 = count1
+    count1 = count1 + np.size(X_array,1)
+    X_bound[count0:count1]=X_array[0,-1::-1]
+    
+    count0 = np.size(Y_array,0)
+    Y_bound[0:count0]= Y_array[:,0]
+    count1 = count0+np.size(Y_array,1)
+    Y_bound[count0:count1]=Y_array[-1,:]
+    count0 = count1
+    count1 = count1 + np.size(Y_array,0)
+    Y_bound[count0:count1]=Y_array[-1::-1,-1]
+    count0 = count1
+    count1 = count1 + np.size(Y_array,1)
+    Y_bound[count0:count1]=Y_array[0,-1::-1]
+    
+    return X_bound,Y_bound 
 
 def get_contour_box_fromvectors(x,y):
-	lenX = len(x)
-	lenY = len(y)
-	x_contour=np.zeros(2*lenX+2*lenY)
-	y_contour=np.zeros(2*lenX+2*lenY)
+    lenX = len(x)
+    lenY = len(y)
+    x_contour=np.zeros(2*lenX+2*lenY)
+    y_contour=np.zeros(2*lenX+2*lenY)
 
-	x_contour[0:lenX]=x
-	y_contour[0:lenX]=np.ones(lenX)*y[0]
-	x_contour[lenX:lenX+lenY]=x[-1]*np.ones(lenY)
-	y_contour[lenX:lenX+lenY]=y
-	x_contour[lenX+lenY:2*lenX+lenY]=x[-1::-1]
-	y_contour[lenX+lenY:2*lenX+lenY]=y[-1]*np.ones(lenX)
-	x_contour[2*lenX+lenY:2*(lenX+lenY)]=x[0]*np.ones(lenY)
-	y_contour[2*lenX+lenY:2*(lenX+lenY)]=y[-1::-1]
+    x_contour[0:lenX]=x
+    y_contour[0:lenX]=np.ones(lenX)*y[0]
+    x_contour[lenX:lenX+lenY]=x[-1]*np.ones(lenY)
+    y_contour[lenX:lenX+lenY]=y
+    x_contour[lenX+lenY:2*lenX+lenY]=x[-1::-1]
+    y_contour[lenX+lenY:2*lenX+lenY]=y[-1]*np.ones(lenX)
+    x_contour[2*lenX+lenY:2*(lenX+lenY)]=x[0]*np.ones(lenY)
+    y_contour[2*lenX+lenY:2*(lenX+lenY)]=y[-1::-1]
 
-	return x_contour,y_contour
+    return x_contour,y_contour
 
-	
-# function to copy ncfiles in local path
-# by reading to original file entierely and writing everything in a newfile
-# use as:
-# -  'copy_NCfile(file1,file2,0)' if you don't need log info
-# -  'copy_NCfile(file1,file2,1)' in order to see the details of the processing
-def copy_NCfile(originalfile,targetfile,isdebug):
-	# -- 0. Open datasets -------------------
-	originalDS = nc.Dataset(originalfile)
-	targetDS = nc.Dataset(targetfile,mode='w')
-	if isdebug:
-		print('Reading datasets : done !')
-	
-	# -- 1. Read dimensions from original dataset and apply to target
-	if isdebug:
-		print('Reading + copying dimensions ...')
-	for name, dim in originalDS.dimensions.items():
-		targetDS.createDimension(name, len(dim) if not dim.isunlimited() else None)
-	if isdebug:
-		print('Reading + copying dimensions : done !')
-	
-	# -- 2. Read attributes and copy to target	
-	if isdebug:
-		print('Reading + copying attributes ...')
-	targetDS.setncatts({a:originalDS.getncattr(a) for a in originalDS.ncattrs()})
-	if isdebug:
-		print('Reading + copying attributes : done !')
-		
-	# -- 3. For each variable: read and copy variable (with attributes)
-	if isdebug:
-		print('Reading + copying variables ...')
-	count = 0
-	for name, var in originalDS.variables.items():
-		count = count +1
-		if isdebug:
-			print('Start of var '+str(count)+' over '+str(len(originalDS.variables.items())))
-		targetDS.createVariable(name, var.dtype, var.dimensions)
-		targetDS.variables[name].setncatts({a:var.getncattr(a) for a in var.ncattrs()})
-		targetDS.variables[name][:] = originalDS.variables[name][:]
-		if isdebug:
-			print('Done for var '+str(count)+' over 49')
-			
-	if isdebug:
-		print('Reading + copying variables : done !')
-		
-	# -- 4. close files
-	targetDS.close()
-	originalDS.close()
-
+    
 # ---- add ocean label ---------------------------------
-def add_ocean_label(lon,lat):
-    shape = geopandas.read_file("/home/mdecarlo/DATA/GOaS_v1/GOaS_v1_20211214/goas_v01.shp")
+def add_ocean_label(lon,lat,shape=None,order_k = None):
+    import geopandas
+    if shape is None:
+        shape = geopandas.read_file("/home/mdecarlo/Documents/DATA/GOaS_v1/GOaS_v1_20211214/goas_v01.shp")
     ocean_label=np.zeros(np.shape(lon),dtype=int)-1 # set default = -1
     points_geo=geopandas.points_from_xy(lon,lat)
-    order_k=range(10)
+    lS = len(shape)
+    if order_k is None:
+    # as we use convex-hull the shape are really rough so the order akkows to have a good representation
+        order_k=np.array([0,1,2,3,5,4,9,8,7,6],dtype=int)
     ocean_names=[]
     ocean_names_short=[]
     ocean_names.append('Land') # set default to Land
     ocean_names_short.append('Land') # set default to Land
-    for k in range(10):
+    for ik,k in enumerate(order_k):#range(lS):
         # --- get the name of oceans - both short and complete 
-        A=shape.name[k].split(' ',-1)
+        A=shape.name[ik].split(' ',-1)
         if len(A)<=3:
             if len(A)==3:
                 A[0]=A[0][0]+'.'
             B = ' '.join(A[:-1])
         elif len(A)>3:
             B = A[-2]
-        ocean_names.append(shape.name[k])
+        ocean_names.append(shape.name[ik])
         ocean_names_short.append(B)
-        # --- for each polygon check if points are inside ----
-        if (shape.geometry[k]).geom_type=='MultiPolygon':
-            for k_in in range(len(shape.geometry[k])):
-                SG=shape.geometry[order_k[k]][k_in].convex_hull
-                ind=points_geo.within(SG)
-                ocean_label[ind]=order_k[k]
+        # --- for each polygon check if points are inside : ------------------------
+        # -- convex_hull : simplifies polygon and makes 'within()' quicker
+        # SK = shape.geometry[order_k[ik]]
+        SK = shape.geometry[k]
+        if SK.geom_type=='MultiPolygon':
+            for k_in in range(len(SK.geoms)):
+                SG = SK.geoms[k_in].convex_hull
+                ind = points_geo.within(SG)
+                # ocean_label[ind]=order_k[ik]
+                ocean_label[ind] = k
         else:
-            SG=shape.geometry[order_k[k]].convex_hull
+            SG = SK.convex_hull
             ind=points_geo.within(SG)
-            ocean_label[ind]=order_k[k]
-    
+            # ocean_label[ind]=order_k[ik]
+            ocean_label[ind] = k
+
     return ocean_label,ocean_names,ocean_names_short
 
+
 def init_map_cartopy(ax0,limx=(-180,180),limy=(-80,80)):
+    ''' output : ax0, g1
+    where g1 are the gridlines
+    '''
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature    
+    
     ax0.set_extent([limx[0],limx[1],limy[0],limy[1]],crs=ccrs.PlateCarree())
     # Grid Lines of the map ----------------------
     g1 = ax0.gridlines(ccrs.PlateCarree(), draw_labels=True)
@@ -315,93 +410,102 @@ def init_map_cartopy(ax0,limx=(-180,180),limy=(-80,80)):
     # add the features ---
     ax0.add_feature(land)
     ax0.coastlines()
-    
+
     return ax0, g1
 
 
 def multiple_histo_groupby(DatasetGroupedby,xbins,var,ax,space=0.2,xticklabels=None,xticklabelsRot=90,xticks=None,ylabel=None,groupLabels=None):
 # --- Histo of the variable 'var' from a dataset groupedby
-	LenGroup=len(DatasetGroupedby)
-	x=np.arange(len(xbins)-1)
-	print(len(x))
-	x0 = x - 0.5 + (space/2)
-	width = (1-space)/LenGroup
-	# x = 0.5*(bins[1:]+bins[0:-1])
-	count_label=0
-	for grlabel, group in DatasetGroupedby:
-		counts, _ = np.histogram(group[var],bins=xbins)
-		if groupLabels != None:
-				grlabel=groupLabels[count_label]
-		_= ax.bar(x0 + count_label*width, counts, width, label=grlabel)
-		count_label=count_label+1
+    LenGroup=len(DatasetGroupedby)
+    x=np.arange(len(xbins)-1)
+    print(len(x))
+    x0 = x - 0.5 + (space/2)
+    width = (1-space)/LenGroup
+    # x = 0.5*(bins[1:]+bins[0:-1])
+    count_label=0
+    for grlabel, group in DatasetGroupedby:
+        counts, _ = np.histogram(group[var],bins=xbins)
+        if groupLabels != None:
+                grlabel=groupLabels[count_label]
+        _= ax.bar(x0 + count_label*width, counts, width, label=grlabel)
+        count_label=count_label+1
 # ax.hist(ds_old.Ocean_flag,bins=np.arange(-2,11)+0.5,alpha=0.5)
-	if xticks!=None:
-		_=ax.set_xticks(xticks)
-	else:
-		_=ax.set_xticks(x)
-	if ylabel!=None:
-		_=ax.set_ylabel(ylabel)
-	if xticklabels!=None:
-		_=ax.set_xticklabels(xticklabels,rotation=xticklabelsRot)
-	_=plt.legend()
-	plt.grid()
-    
-    
-def print_summary_xarray(ds):
-	str1='Dimensions:                ('
-	for idim in ds.dims:
-		str1=str1+idim+': '+str(ds.dims[idim])+', '
-	str1=str1[:-2]+')'
-	print(str1)
-	print(ds.coords)
-	print(ds.data_vars)
+    if xticks!=None:
+        _=ax.set_xticks(xticks)
+    else:
+        _=ax.set_xticks(x)
+    if ylabel!=None:
+        _=ax.set_ylabel(ylabel)
+    if xticklabels!=None:
+        _=ax.set_xticklabels(xticklabels,rotation=xticklabelsRot)
+    _=plt.legend()
+    plt.grid()
 
-	
-	
+    
 def get_datetime_fromDOY(YYYY,DOY):
-	return pd.to_datetime(dt.datetime(YYYY,1,1))+pd.Timedelta(days=DOY-1)
-	
+    import pandas as pd
+    return pd.to_datetime(dt.datetime(YYYY,1,1))+pd.Timedelta(days=DOY-1)
+    
 
 def get_nearest_model_interpolator(lon_lims=[-180., 180.],lat_lims=[-78.,83.],lon_step=0.5,lat_step=0.5):
+    import scipy.interpolate as spi
     lon_mod = np.arange(lon_lims[0],lon_lims[1],lon_step)
     lat_mod = np.arange(lat_lims[0],lat_lims[1],lat_step)
     lon_interpolator=spi.interp1d(lon_mod,lon_mod,kind='nearest')
     lat_interpolator=spi.interp1d(lat_mod,lat_mod,kind='nearest')
-    
+
     return lon_interpolator, lat_interpolator
 
 def get_nearest_model_interpolator_index(lon_lims=[-180., 180.],lat_lims=[-78.,83.],lon_step=0.5,lat_step=0.5):
+    import scipy.interpolate as spi
     lon_mod = np.arange(lon_lims[0],lon_lims[1],lon_step)
     lat_mod = np.arange(lat_lims[0],lat_lims[1],lat_step)
     ilon_interpolator=spi.interp1d(lon_mod,np.arange(len(lon_mod)),kind='nearest')
     ilat_interpolator=spi.interp1d(lat_mod,np.arange(len(lat_mod)),kind='nearest')
-    
+
     return ilon_interpolator, ilat_interpolator
     
 def read_Hs_model(date1,path=None):
-	if path == None:
-		path='/home/ref-ww3/GLOBMULTI_ERA5_GLOBCUR_01/GLOB-30M/'
-	yr = date1.year
-	T1str=date1.strftime('%Y%m')
-	path_year=os.path.join(path,str(yr),'FIELD_NC')
-	strfile='LOPS_WW3-GLOB-30M_'+T1str+'.nc'
-	ds=xr.open_dataset(os.path.join(path_year,strfile))
-	ds1=ds.sel(time=slice(date1-np.timedelta64(90,'m'), date1+np.timedelta64(90,'m')))
-	return ds1
-	
+    if path == None:
+        path='/home/ref-ww3/GLOBMULTI_ERA5_GLOBCUR_01/GLOB-30M/'
+    yr = date1.year
+    T1str=date1.strftime('%Y%m')
+    path_year=os.path.join(path,str(yr),'FIELD_NC')
+    strfile='LOPS_WW3-GLOB-30M_'+T1str+'.nc'
+    ds=xr.open_dataset(os.path.join(path_year,strfile))
+    ds1=ds.sel(time=slice(date1-np.timedelta64(90,'m'), date1+np.timedelta64(90,'m')))
+    return ds1
+    
 # ---  plot 2D model for one date 
 def plot_2D_model_Hs(ax,date1,path=None,limx=(-180,180),limy=(-80,80),norm=None):
-	ds=read_Hs_model(date1,path=None)
-	if path == None:
-		path='/home/ref-ww3/GLOBMULTI_ERA5_GLOBCUR_01/GLOB-30M/'
-	if norm==None:
-		swhNorm = mcolors.Normalize(vmin=5, vmax=12)	
-	ds1=ds.sel(longitude=slice(limx[0],limx[1]),latitude=slice(limy[0],limy[1]))
-	
-	ax,g1=init_map_cartopy(ax,limx=limx,limy=limy)
-	
-	ax.pcolormesh(ds1.longitude,ds1.latitude,np.squeeze(ds1.hs),norm=norm)
+    if path == None:
+        path='/home/ref-ww3/GLOBMULTI_ERA5_GLOBCUR_01/GLOB-30M/'
+    ds=read_Hs_model(date1,path=path)
+    if norm==None:
+        swhNorm = mcolors.Normalize(vmin=5, vmax=12)    
+    ds1=ds.sel(longitude=slice(limx[0],limx[1]),latitude=slice(limy[0],limy[1]))
+    
+    ax,g1=init_map_cartopy(ax,limx=limx,limy=limy)
+    
+    im=ax.pcolormesh(ds1.longitude,ds1.latitude,np.squeeze(ds1.hs),norm=norm)
+    return im,g1
 
+def extract_Welch_tiles_1D(A,nxtile):
+    # nxtiles : nb of pixels by tiles
+    nxA = len(A)
+    #     nxtile = int(nxA//Ntiles)
+    Ntiles = int(nxA//nxtile)
+    shx = int(nxtile//2)
+    Ntiles_overlap = 2*Ntiles-1
 
-
+    extract= np.zeros((Ntiles_overlap,nxtile))
+    for windows in range(Ntiles_overlap):
+        if windows < Ntiles:
+            i1 = int(windows + 1)
+            extract[windows,:]=A[nxtile*(i1-1):nxtile*i1]
+        elif windows >= Ntiles:
+            i1 = int((windows-Ntiles)+ 1)
+            extract[windows,:]=A[nxtile*(i1-1)+shx:nxtile*i1+shx]
+    
+    return extract, Ntiles_overlap
 

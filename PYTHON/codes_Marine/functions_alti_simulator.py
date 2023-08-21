@@ -75,6 +75,31 @@ def surface_from_Z1kxky(Z1,kX,kY,i,nx=None,ny=None,dx=None,dy=None,dkx=None,dky=
 	
 	return S1,X,Y 
 
+def surface_1D_from_Z1kx(Z1,kX,i,nx=None,dx=None,dkx=None):
+	if nx==None:
+		nx = len(Z1)
+
+	if (dx==None):
+		if dkx == None:
+			dx = 2*np.pi/((kX[1] - kX[0])*nx)
+		else:
+			dx = 2*np.pi/(dkx*nx)
+			
+	if (dkx==None):
+		dkx = 2*np.pi/(dx*nx)
+
+	rng = np.random.default_rng(i)
+	rg = rng.uniform(low=0.0, high=1.0, size=(nx))
+	zhats=np.fft.ifftshift(np.sqrt(2*Z1*dkx)*np.exp(1j*2*np.pi*rg))
+	kx0=np.fft.ifftshift(kX)
+    
+	S1_r = np.real(np.fft.ifft(zhats,norm="forward"))
+	S1_i = np.imag(np.fft.ifft(zhats,norm="forward"))
+
+	X = np.arange(0,nx*dx,dx) # from 0 to (nx-1)*dx with a dx step
+	
+	return S1_r,S1_i,X,dkx 
+'''
 def generate_wvform_database(dr,nHs,edges_max=20,Hs_max=25,offset=10):
 	# edges=np.linspace(0,edges_max,ne)    # range vector
 	edges=np.arange(0,edges_max+dr,dr)   # range vector
@@ -85,7 +110,26 @@ def generate_wvform_database(dr,nHs,edges_max=20,Hs_max=25,offset=10):
 	for k in range(nHs):
 		wfm[k,:]=0.5+0.5*sps.erf((edges[:-1]+0.5*dr-offset) / (0.25*np.sqrt(2)*Hsm[k]))
 
-	return wfm, Hsm, edges	
+	return wfm, Hsm, edges
+'''
+def generate_wvform_database(nHs,dr=None,ne = None,bandwidth=320*1e6,edges_max=25,Hs_max=25,offset=10):
+	if (dr is None)&(ne is None):
+		clight = 299792458
+		dr = clight * 1/(bandwidth)
+		edges = np.arange(0,edges_max+dr,dr) 
+	elif (dr is None)&(ne is not None):
+		edges=np.linspace(0,edges_max,ne)
+	elif (ne is None)&(dr is not None):
+		edges = np.arange(0,edges_max+dr,dr) 
+	dr=edges[1]-edges[0]
+	ne = len(edges)               
+	Hsm=np.linspace(0,Hs_max,nHs)
+	wfm=np.zeros((nHs,ne-1))
+	for k in range(nHs):
+		wfm[k,:]=0.5+0.5*sps.erf((edges[:-1]+0.5*dr-offset) / (0.25*np.sqrt(2)*Hsm[k]))
+
+	return wfm, Hsm, edges,dr
+
 
 def simple_retracking_process(wfm,edges,nHs=251,alti_sat=519000,dx=10,offset=10,index_calc=None,wfm_ref=None,Hsm_ref=None,ispolyfit=0):
 	if (type(wfm_ref)==type(None)) | (type(Hsm_ref)==type(None)):
@@ -111,6 +155,22 @@ def simple_retracking_process(wfm,edges,nHs=251,alti_sat=519000,dx=10,offset=10,
 		Hs = Hsm_ref[Imin]
 
 	return Hs
+	
+def simple_retracking_process_v0(wfm,edges,max_edg=25,nHs=251,alti_sat=519*1e3,dx=10,offset=10,wfm_ref=None,Hsm_ref=None,ispolyfit=0):
+    dr = edges[1]-edges[0]
+    Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
+    
+    testwf=np.broadcast_to(wfm,(nHs,len(wfm)))
+    dist=np.sum((Apix*wfm_ref[:,0:max_edg]-testwf[:,0:max_edg])**2,axis=1)
+
+    if ispolyfit:
+        p = np.polyfit(Hsm_ref,dist,2)
+        Hs = -p[1]/(2*p[0])
+    else:
+        Imin=np.argmin(dist)
+        Hs = Hsm_ref[Imin]
+
+    return Hs
 	
 def def_spectrum_for_surface(nx=2048,ny=2048,dx=10,dy=10,theta_m=30,D=1000,T0=10,Hs=4,sk_theta=0.001,sk_k=0.001,nk=1001,nth=36,klims=(0.0002,0.2),n=4,typeSpec='Gaussian'):
 	dkx = 2*np.pi/(dx*nx)
@@ -142,7 +202,20 @@ def def_spectrum_for_surface(nx=2048,ny=2048,dx=10,dy=10,theta_m=30,D=1000,T0=10
 
 	return Z1, kX, kY
 
-def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi):
+def def_spectrumG_for_surface_1D(nx=2048,dx=10,T0=10,Hs=4,sk_k0=0.1,D='None'):
+	dkx = 2*np.pi/(dx*nx)
+
+	kX = np.fft.fftshift(np.fft.fftfreq(nx,d=dx))*2*np.pi
+	
+	# only Gaussian		
+	Z1_Gaussian,kX,sk = Gaussian_1Dspectrum_kx(kX,T0,sk_k0,D=D)
+	Z1 =(Hs/4)**2*Z1_Gaussian
+	sumZ1=4*np.sqrt(sum(Z1.flatten()*dkx)) 
+	print('Hs for Gaussian : ',sumZ1)
+	
+	return Z1, kX,sk
+
+def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,alti_sat=519000):
 	ny_mid = len(np.unique(Y))//2
 	Xalt = np.zeros((nsamp,1))
 	Hs_retrack = np.zeros((nsamp,1))
@@ -159,7 +232,7 @@ def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi):
 
 	for isamp in range(nsamp):
 		# clear_output(wait=True)
-		print(isamp)
+		# print(isamp)
 		ialt=(nxa+isamp*di).astype(int)
 		Xalt[isamp] = X[ialt]
 		surf=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint
@@ -168,7 +241,7 @@ def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi):
 		r[dist_ground > radi**2]=np.nan  # equivalent to multiplication by footprint
 
 		counts,_=np.histogram(r,bins=edges_ref)
-		Hs_retrack[isamp] = simple_retracking_process(counts,edges_ref,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref) 
+		Hs_retrack[isamp] = simple_retracking_process_v0(counts,edges_ref,dx=dx,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref) 
 		waveforms[isamp,:]=counts
 		Hs_std[isamp] = 4*np.nanstd(surf.flatten())#/np.sqrt(np.mean(footprint))
 
@@ -286,4 +359,109 @@ def process_investigateR_1surface(i,Z1,kX,kY):
 				dist_disk_retrack[ir2]=np.sum((np.squeeze(Hs_std_disk[:,ir2])-np.squeeze(Hs_retrack))**2)
 
 	return i,dist_disk_retrack,dist_ring_retrack,radis1,radis2,Hs_std_disk,Hs_std_ring,Hs_retrack
+
+def FFT2D(arraya,nxa,nya,dx,dy,n,isplot=0):
+# function to do a FFT 2D 
+# nxa, nya : size of arraya
+# dx,dy : resolution of arraya
+# n : number of tiles in each directions ... 
+# 
+# Eta is PSD of 1st image (arraya) 
+# Etb is PSD of 2st image (arraya) 
+	mspec=n**2+(n-1)**2
+
+	nxtile=int(np.floor(nxa/n)) 
+	nytile=int(np.floor(nya/n))
+	print('nxtile : ',nxtile)
+	print('nytile : ',nytile)
+
+	dkxtile=2*np.pi/(dx*nxtile)   
+	dkytile=2*np.pi/(dy*nytile)
+
+	shx = int(nxtile//2)
+	shy = int(nytile//2)
+
+	### --- prepare wavenumber vectors -------------------------
+	# wavenumbers starting at zero
+	kx=np.linspace(0,(nxtile-1)*dkxtile,nxtile)
+	ky=np.linspace(0,(nytile-1)*dkytile,nytile)
+	# Shift wavenumbers to have zero in the middle
+	kxs=np.roll(kx,-shx)
+	kys=np.roll(ky,-shy)
+
+	# change the first half to have negative wavenumber
+	kxs[:shx+1]=kxs[:shx+1]-kx[-1]-dkxtile
+	kys[:shy+1]=kys[:shy+1]-ky[-1]-dkytile
+
+	kx2,ky2 = np.meshgrid(kxs,kys)
+	if isplot:
+		X = np.arange(0,nxa*dx,dx) # from 0 to (nx-1)*dx with a dx step
+		Y = np.arange(0,nya*dy,dy)
+
+	### --- prepare Hanning windows for performing fft and associated normalization ------------------------
+
+	hanningx=(0.5 * (1-np.cos(2*np.pi*np.linspace(0,nxtile-1,nxtile)/(nxtile-1))))
+	hanningy=(0.5 * (1-np.cos(2*np.pi*np.linspace(0,nytile-1,nytile)/(nytile-1))))
+	# 2D Hanning window
+	hanningxy=np.atleast_2d(hanningx)*np.atleast_2d(hanningy).T 
+
+	wc2x=1/np.mean(hanningx**2);                              # window correction factor
+	wc2y=1/np.mean(hanningy**2);                              # window correction factor
+
+	normalization = (wc2x*wc2y)/(dkxtile*dkytile)
+
+	### --- Initialize Eta = mean spectrum over tiles ---------------------
+
+	Eta=np.zeros((nytile,nxtile))
+	Eta_all=np.zeros((nytile,nxtile,mspec))
+	if isplot:
+		fig1,ax1=plt.subplots(figsize=(12,6))
+		ax1.pcolormesh(X,Y,arraya)
+		colors = plt.cm.seismic(np.linspace(0,1,mspec))
+
+    ### --- Calculate spectrum for each tiles ----------------------------
+	for m in range(mspec):
+		### 1. Selection of tile ------------------------------
+		if (m<n**2):
+			i1=int(np.floor(m/n)+1)
+			i2=int(m+1-(i1-1)*n)
+
+			ix1 = nxtile*(i1-1)
+			ix2 = nxtile*i1-1
+			iy1 = nytile*(i2-1)
+			iy2 = nytile*i2-1
+
+			#                 array1=double(arraya(nx*(i1-1)+1:nx*i1,ny*(i2-1)+1:ny*i2));
+			#        Select a 'tile' i.e. part of the surface : main loop ---------
+
+			array1=np.double(arraya[iy1:iy2+1,ix1:ix2+1])
+			if isplot:
+				ax1.plot(X[[ix1,ix1,ix2,ix2,ix1]],Y[[iy1,iy2,iy2,iy1,iy1]],'-',color=colors[m],linewidth=2)
+		else:
+			#        # -- Select a 'tile' overlapping (50%) the main tiles ---
+			#        %%%%%%%%%%%%%%% now shifted 50% , like Welch %%%%%%%%%%%%%%
+			i1=int(np.floor((m-n**2)/(n-1))+1)
+			i2=int(m+1-n**2-(i1-1)*(n-1))
+
+
+			ix1 = nxtile*(i1-1)+shx 
+			ix2 = nxtile*i1+shx-1
+			iy1 = nytile*(i2-1)+shy
+			iy2 = nytile*i2+shy-1
+
+			array1=np.double(arraya[iy1:iy2+1,ix1:ix2+1])
+			if isplot:
+				ax1.plot(X[[ix1,ix1,ix2,ix2,ix1]],Y[[iy1,iy2,iy2,iy1,iy1]],'-',color=colors[m],linewidth=2)
+
+		### 2. Work over 1 tile ------------------------------ 
+		tile_centered=array1-np.mean(array1.flatten())
+		tile_by_windows = (tile_centered)*hanningxy
+
+		# 
+		tileFFT = np.fft.fft(tile_by_windows,norm="forward")#/(nx*ny)
+		tileFFT_shift = np.roll(tileFFT,(-shy,-shx),axis=(0,1))
+		Eta_all[:,:,m] = (abs(tileFFT_shift)**2) *normalization
+		Eta[:,:] = Eta[:,:] + (abs(tileFFT_shift)**2) *normalization #          % sum of spectra for all tiles
+
+	return Eta/mspec,Eta_all,kx2,ky2
 

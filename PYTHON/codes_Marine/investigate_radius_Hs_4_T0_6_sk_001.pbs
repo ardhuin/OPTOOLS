@@ -1,9 +1,0 @@
-#!/bin/csh
-#PBS -q mpi_1 -l select=1:ncpus=28:mpiprocs=28:mem=50G
-#PBS -l walltime=10:00:00
-cd $PBS_O_WORKDIR
-#source /usr/share/Modules/3.2.10/init/csh
-#module purge
-#module load NETCDF/4.3.3.1-mpt-intel2016
-source /home1/datahome/mdecarlo/.cshrc
-python3 /home1/datahome/mdecarlo/AltiProcessing/codes/mp_investigate_radius.py 4 6 0.001 >& /$SCRATCH/investigateR_${PBS_JOBID}
