@@ -20,17 +20,23 @@ def calc_footprint_diam(Hs,pulse_width = 1/(320*1e6),Rorbit=519*1e3,Rearth = 637
 ######################  Defines waveform theoretical models: most simple, 2 parameter erf 
 ######################                                      includes optionnal PTR 
 def  wf_erf2D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
+     import matplotlib.pyplot as plt
      ff0 = noise+ 0.5 * (  1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])  ) ) 
      if PTR[0] < 1:
         fff =fftconvolve(ff0,PTR,mode='same')
      else:
         fff=ff0
-     return fff
-
-     fff = noise+ 0.5 * (  1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])  ) ) 
+#     print('TEST 2:',ff0[0],fff[0],np.shape(xdata))
+#     fig,ax=plt.subplots(figsize=(14,6))
+#     line1=ax.plot(xdata,fff,color='r')
+#     line1=ax.plot(xdata,ff0,color='b')
+#     if PTR[0] < 1: 
+#        line1=ax.plot(xdata, PTR,color='m')
+#     ax.set_yscale('log')
      return fff
 
 def  wf_erf2D(incognita,data)  :
+     import matplotlib.pyplot as plt
      """
      returns the least-square distance between the waveform data[0] and the simplest erf waveform
      two unknown parameter: (epoch,Hs)  both in meters
@@ -53,8 +59,15 @@ def  wf_erf2D(incognita,data)  :
         cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
      else:
         ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
-        cy= ( ratio - np.log(ratio)).sum()
-
+        cy= ( ratio - np.log(ratio)-1.).sum()
+#        print('TEST 1:',ff0[0],fff[0],costfun,min_gate,max_gate,incognita[0],incognita[1],cy) 
+    #    fig,ax=plt.subplots(figsize=(14,6))
+    #    line1=ax.plot(xdata,ydata,color='k')
+    #    line1=ax.plot(xdata,fff,color='r')
+    #    line1=ax.plot(xdata,ff0,color='b')
+    #    line1=ax.plot(xdata,   ratio - np.log(ratio)-1.,color='g')
+    #    line1=ax.plot(xdata, PTR,color='m')
+    #    ax.set_yscale('log')
      return cy
 
 ######################  generalized erf with groups 
@@ -192,12 +205,12 @@ def  wf_brown(incognita,data)  :
 ######################  Defines waveform theoretical models: brown from WHALES code + wave groups
 def  wf_bro4D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
      sig=incognita[1]
-     da=incognita[3]*sig*sig
+     da=incognita[3]
      ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
      ro2=(xdata-incognita[0])/sig
      ro3=4*incognita[4]  # b is R0/(Hs), 4*b is R0/sig
 
-     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/(sig*sig)/np.sqrt(2*np.pi)
+     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/np.sqrt(2*np.pi)
      dd=da*dw
 
 #     ff0 = noise+ 0.5 *( 1+sps.erf( ros ) ) +  dd 
@@ -235,12 +248,12 @@ def  wf_bro4D(incognita,data)  :
      PTR = data[10]
      
      sig=incognita[1]
-     da=incognita[3]*sig*sig
+     da=incognita[3]
      ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
      ro2=(xdata-incognita[0])/sig
      ro3=4*incognita[4]  # b is R0/(Hs), 4*b is R0/sig
 
-     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/(sig*sig)/np.sqrt(2*np.pi)
+     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/np.sqrt(2*np.pi)
      dd=da*dw
 
      ff0 = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
@@ -297,18 +310,18 @@ def wf_eval(ranges,inputpar,clight,wf_model,tau=2.5,nominal_tracking_gate=30,noi
 
 def retracking_NM(wfm,times,rtot,wf_fun,Gamma=1.,Zeta=0.,c_xi=0.,min_gate=0,max_gate=127,weights=1.,\
 noise=0.,tau=2.5,costfun='LS',nominal_tracking_time=64*2.5,method='Nelder-Mead',PTR=([1])):
-
+#    print('TEST 0:',nominal_tracking_time,2.5*rtot) 
     Pu=None
     da=None
     R0=None 
     if wf_fun =='wf_erf2D':
-       incognita=np.array([nominal_tracking_time,10.0*rtot,1.,0,0]) # initial conditions: could use previous waveform ... 
+       incognita=np.array([nominal_tracking_time,2.5*rtot,1.,0,0]) # initial conditions: could use previous waveform ... 
     elif wf_fun =='wf_brown':
-      incognita=np.array([nominal_tracking_time,10.0*rtot,1.,0,0]) # initial conditions: could use previous waveform ... 
+      incognita=np.array([nominal_tracking_time,2.5*rtot,1.,0,0]) # initial conditions: could use previous waveform ... 
     elif wf_fun =='wf_erf4D':
-      incognita=np.array([nominal_tracking_time,5.0*rtot,1.,0,0]) # initial conditions: could use previous waveform ... 
+      incognita=np.array([nominal_tracking_time,2.5*rtot,1.,0,0]) # initial conditions: could use previous waveform ... 
     elif wf_fun =='wf_bro4D':
-      incognita=np.array([nominal_tracking_time,10.0*rtot,1e-6,0,0]) # initial conditions: could use previous waveform ... 
+      incognita=np.array([nominal_tracking_time,2.5*rtot,1e-6,0,0]) # initial conditions: could use previous waveform ... 
 
     xopt = minimize(eval(wf_fun), incognita, args=((wfm,Gamma,Zeta,times,c_xi,noise,min_gate,max_gate,weights,costfun,PTR),),\
                     method=method,options={'disp': False})
@@ -358,7 +371,7 @@ def retracking_pyramid1(wfm,times,rtot,wf_fun,Gamma=1.,Zeta=0.,c_xi=0.,weights=1
     return Sigma, epoch, dmin
 
 ############# A 2-parameter pyramid grid search #################
-def retracking_pyramid2(wfm,times,rtot,wf_fun,Gamma=1.,Zeta=0.,c_xi=0.,weights=1.,noise=0.,tau=2.5,costfun='LS',nominal_tracking_time=64*2.5,PTR=([1.0])):
+def retracking_pyramid2(wfm,times,rtot,wf_fun,Gamma=1.,Zeta=0.,c_xi=0.,min_gate=0,max_gate=127,weights=1.,noise=0.,tau=2.5,costfun='LS',nominal_tracking_time=64*2.5,PTR=([1.0])):
     nsteps=12
     a0= 0.0+nominal_tracking_time
     a1=15.0*rtot
@@ -371,7 +384,7 @@ def retracking_pyramid2(wfm,times,rtot,wf_fun,Gamma=1.,Zeta=0.,c_xi=0.,weights=1
            for i1 in range(5):
 # Note that 9 out of 25 have already been computed at the previous step ... 
               incognita=np.array([a0+(i0-2)*b0,a1+(i1-2)*b1])
-              dist[i0,i1]=eval(wf_fun)(incognita,(wfm,Gamma,Zeta,times,c_xi,weights,noise,tau,costfun,PTR)) 
+              dist[i0,i1]=eval(wf_fun)(incognita,(wfm,Gamma,Zeta,times,c_xi,noise,min_gate,max_gate,weights,costfun,PTR)) 
               #print('      inds:',i0,i1,incognita,dist[i0,i1])       
     
         i0min,i1min = np.unravel_index(np.nanargmin(dist,axis=None),dist.shape)
@@ -558,9 +571,10 @@ def retrack_waveforms(waveforms,ranges,max_range_fit,clight,mispointing=0.,theta
     SigmaP=0.513*tau   # should use tax instead!
     Gamma =(np.sin(theta3dB))**2/(np.log(2)*2)
     clightn=clight/stonano
-    in1=nominal_tracking_gate-40
-    in2=nominal_tracking_gate-30
+    in1=0 #nominal_tracking_gate-40
+    in2=10  #nominal_tracking_gate-30
     noise=np.median(np.mean(waveforms[:,:,in1:in2],axis=2))
+    print('Estimated noise level:',noise,timeshift)
     if len(mispointing)<2:
        mispointing=mispointing+np.zeros((nxw,nyw))
     
@@ -579,16 +593,16 @@ def retrack_waveforms(waveforms,ranges,max_range_fit,clight,mispointing=0.,theta
                                                               min_gate=min_range_fit,max_gate=max_range_fit,noise=noise,tau=tau, Gamma=Gamma,Zeta=mispointing[ix,iy], \
                                                               c_xi=c_xi,nominal_tracking_time=timeshift,method=min_method,costfun=costfun,PTR=PTR)
             elif min_method == 'pyramid2':
-               Sigma,t0,di_r[ix,iy]=retracking_pyramid2(wfm[min_range_fit:max_range_fit],\
-                                                              times[min_range_fit:max_range_fit],rtot,wf_model,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
-                                                              c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun,PTR=PTR)
+               Sigma,t0,di_r[ix,iy],                                  =retracking_pyramid2(wfm,times,rtot,wf_model,\
+                 min_gate=min_range_fit,max_gate=max_range_fit,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
+                                                    c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun,PTR=PTR)
             elif min_method == 'pyramid3':
-               Sigma,t0,Pu_r[ix,iy],da_r[ix,iy],R0_r[ix,iy],di_r[ix,iy]=retracking_pyramid3(wfm, times,rtot,wf_model,rtot,wf_model,\
-                                                    min_gate=min_range_fit,max_gate=max_range_fit,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
+               Sigma,t0,Pu_r[ix,iy],da_r[ix,iy],R0_r[ix,iy],di_r[ix,iy]=retracking_pyramid3(wfm,times,rtot,wf_model,\
+                 min_gate=min_range_fit,max_gate=max_range_fit,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
                                                     c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun,PTR=PTR)
             elif min_method == 'pyramid4':
                Sigma,t0,Pu_r[ix,iy],da_r[ix,iy],R0_r[ix,iy],di_r[ix,iy]=retracking_pyramid4(wfm,times,rtot,wf_model,\
-                                                    min_gate=min_range_fit,max_gate=max_range_fit, noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
+                 min_gate=min_range_fit,max_gate=max_range_fit, noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
                                                     c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun,PTR=PTR)
             if PTR_model == 'Gauss':              
                #print('TEST1:',Sigma*4/rtot,np.sqrt(Sigma**2- SigmaP**2)*4/rtot)
@@ -871,7 +885,8 @@ def simu_waveform_erf(X,Y,S1,nsampx,nsampy,nxa0,nxa,di,ranges,range_offset=10,\
     r2=Xa0**2+Ya0**2
     # Uses 2-way antenna pattern to reduce backscattered power 
     power=np.exp(-4*(r2/alti_sat**2)*(1+alti_sat/Ri)/Gamma) 
-            
+
+           
     for isampx in range(nsampx):
         if nsampy > 1:
            print('Generating waveform',isampx,' over ',nsampx,' ------------ ')
