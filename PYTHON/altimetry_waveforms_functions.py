@@ -12,6 +12,15 @@ from scipy.signal import fftconvolve
 
 
 def calc_footprint_diam(Hs,pulse_width = 1/(320*1e6),Rorbit=519*1e3,Rearth = 6370*1e3):
+    '''
+    function to compute Chelton's Diameter (Chelton et al. 1989)
+    inputs : 
+            - Hs : significant wave height (m)
+            - pulse_width : inverse of bandwidth (s)
+            - Rorbit : altitude of satellite orbit (m)
+            - Rearth : Earth radius (m)
+    output : - Chelton's Diameter (m) 
+    '''
     clight= 299792458
     Airemax_div_pi = Rorbit*(clight*pulse_width + 2 * Hs)/(1+(Rorbit/Rearth))
     return 2*np.sqrt(Airemax_div_pi)
@@ -19,48 +28,72 @@ def calc_footprint_diam(Hs,pulse_width = 1/(320*1e6),Rorbit=519*1e3,Rearth = 637
 
 ######################  Defines waveform theoretical models: most simple, 2 parameter erf 
 ######################                                      includes optionnal PTR 
-def  wf_erf2D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
-     import matplotlib.pyplot as plt
-     ff0 = noise+ 0.5 * (  1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])  ) ) 
-     if PTR[0] < 1:
-        fff =fftconvolve(ff0,PTR,mode='same')
-     else:
-        fff=ff0
-#     print('TEST 2:',ff0[0],fff[0],np.shape(xdata))
-#     fig,ax=plt.subplots(figsize=(14,6))
-#     line1=ax.plot(xdata,fff,color='r')
-#     line1=ax.plot(xdata,ff0,color='b')
-#     if PTR[0] < 1: 
-#        line1=ax.plot(xdata, PTR,color='m')
-#     ax.set_yscale('log')
-     return fff
+def  wf_erf2D_eval(xdata,incognita,noise,Gamma=0,Zeta=0,c_xi=0,tau=0,PTR=0)  :
+    '''
+    Define a waveform with a simple erf with 2 parameters (epoch and Hs)
+    inputs :
+            - xdata : range gates
+            - incognita : (2,) vector with incognita[0] = epoch and incognita[1] = Hs
+            - noise : thermal noise
+            - Gamma : not used
+            - Zeta : not used
+            - c_xi : not used
+            - tau : not used
+            - PTR : optionnal PTR
+    output : - waveform
+    '''
+    ff0 = noise+ 0.5 * ( 1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])))
+    
+    if PTR[0] < 1:
+       fff =fftconvolve(ff0,PTR,mode='same')
+    else:
+       fff=ff0
+#    print('TEST 2:',ff0[0],fff[0],np.shape(xdata))
+#    fig,ax=plt.subplots(figsize=(14,6))
+#    line1=ax.plot(xdata,fff,color='r')
+#    line1=ax.plot(xdata,ff0,color='b')
+#    if PTR[0] < 1: 
+#       line1=ax.plot(xdata, PTR,color='m')
+#    ax.set_yscale('log')
+    return fff
 
 def  wf_erf2D(incognita,data)  :
-     import matplotlib.pyplot as plt
-     """
-     returns the least-square distance between the waveform data[0] and the simplest erf waveform
-     two unknown parameter: (epoch,Hs)  both in meters
-     """
+    import matplotlib.pyplot as plt
+    """
+    returns the cost function between the waveform data[0] and the simplest erf waveform
+    two unknown parameter: (epoch,Hs)  both in meters obtained from 'wf_erf2D_eval()'
+    inputs : 
+           - incognita : (2,) vector with incognita[0] = epoch and incognita[1] = Hs
+           - data : (11,) vector with:
+                        - data[0]  : waveform to study
+                        - data[3]  : time in ns
+                        - data[5]  : noise
+                        - data[6]  : min gate to compute cost function
+                        - data[7]  : max gate to compute cost function
+                        - data[8]  : weights over gates (not used)
+                        - data[9]  : cost function to use either 'LS' or 'ML' (anything else gives 'ML')
+                        - data[10] : PTR
+    output : 
+              - cost
+    """
 
-     ydata =data[0] # Waveform
-     xdata =data[3] # times in ns 
-     noise  =data[5]
-     min_gate=data[6]
-     max_gate=data[7]
-     weights=data[8]
-     costfun=data[9]
-     PTR = data[10]
-     ff0 = noise+ 0.5 *(  1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])  ) ) 
-     if PTR[0] < 1:
-        fff =fftconvolve(ff0,PTR,mode='same')
-     else:
-        fff=ff0
-     if costfun=='LS':
-        cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
-     else:
-        ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
-        cy= ( ratio - np.log(ratio)-1.).sum()
-#        print('TEST 1:',ff0[0],fff[0],costfun,min_gate,max_gate,incognita[0],incognita[1],cy) 
+    ydata =data[0] # Waveform
+    xdata =data[3] # times in ns 
+    noise  =data[5]
+    min_gate=data[6]
+    max_gate=data[7]
+    weights=data[8]
+    costfun=data[9]
+    PTR = data[10]
+    
+    fff = wf_erf2D_eval(xdata,incognita,noise,PTR=PTR)
+
+    if costfun=='LS':
+       cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
+    else:
+       ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
+       cy= ( ratio - np.log(ratio)-1.).sum()
+#       print('TEST 1:',ff0[0],fff[0],costfun,min_gate,max_gate,incognita[0],incognita[1],cy) 
     #    fig,ax=plt.subplots(figsize=(14,6))
     #    line1=ax.plot(xdata,ydata,color='k')
     #    line1=ax.plot(xdata,fff,color='r')
@@ -68,74 +101,110 @@ def  wf_erf2D(incognita,data)  :
     #    line1=ax.plot(xdata,   ratio - np.log(ratio)-1.,color='g')
     #    line1=ax.plot(xdata, PTR,color='m')
     #    ax.set_yscale('log')
-     return cy
+    return cy
 
 ######################  generalized erf with groups 
 def  wf_erf4D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
+    '''
+    Define a waveform generalised with wave groups.
+    Based on a simple erf with 2 parameters (epoch and Hs) + 2 wave groups params (da and R0)
+    inputs :
+            - xdata : range gates
+            - incognita : (4,) vector with [0] = epoch, [1] = Hs, [2] = da and [3] = R0
+            - noise : thermal noise
+            - Gamma : not used
+            - Zeta : not used
+            - c_xi : not used
+            - tau : not used
+            - PTR : optionnal PTR
+    output : - waveform
+    '''
+    sig = incognita[1]
+    da = incognita[3]*sig*sig
+    ros = (xdata-incognita[0])/(np.sqrt(2)*sig)
+    ro2 = (xdata-incognita[0])/sig
+    ro3 = 4*incognita[4]  # this is R0/Hs
+
+    dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/(sig*sig)/np.sqrt(2*np.pi)
+    dd=da*dw
     
-     sig=incognita[1]
-     da=incognita[3]*sig*sig
-     ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
-     ro2=(xdata-incognita[0])/sig
-     ro3=4*incognita[4]  # this is R0/Hs
+    ff0 = noise+ 0.5 * (  1+sps.erf( ros  ) )+dd 
+    if PTR[0] < 1:
+       fff =fftconvolve(ff0,PTR,mode='same')
+    else:
+       fff=ff0
 
-     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/(sig*sig)/np.sqrt(2*np.pi)
-     dd=da*dw
-     
-     ff0 = noise+ 0.5 * (  1+sps.erf( ros  ) )+dd 
-     if PTR[0] < 1:
-        fff =fftconvolve(ff0,PTR,mode='same')
-     else:
-        fff=ff0
-
-     return fff
+    return fff
 
 
 def  wf_erf4D(incognita,data)  :
-     """
-     returns the least-square distance between the waveform data[0] and the simplest erf waveform
-     two unknown parameter: (epoch,Hs)  both in meters
-     """
-     ydata  =data[0] # Waveform
-     xdata  =data[3] # times in ns 
+    """
+    returns the cost function between the waveform data[0] and the generalised waveform
+    obtained from 'wf_erf4D_eval()' based on a erf with 2 params and 2 wave group params.
+    inputs : 
+           - incognita : (4,) vector with [0] = epoch, [1] = Hs, [2] = da and [3] = R0
+           - data : (11,) vector with:
+                        - data[0]  : waveform to study
+                        - data[3]  : time in ns
+                        - data[5]  : noise
+                        - data[6]  : min gate to compute cost function
+                        - data[7]  : max gate to compute cost function
+                        - data[8]  : weights over gates (not used)
+                        - data[9]  : cost function to use either 'LS' or 'ML' (anything else gives 'ML')
+                        - data[10] : PTR
+    output : 
+              - cost
+    """
+    ydata  =data[0] # Waveform
+    xdata  =data[3] # times in ns 
 
-     noise  =data[5]
-     min_gate=data[6]
-     max_gate=data[7]
-     weights=data[8]
-     costfun=data[9]
-     PTR = data[10]
-     
-     # Matlab version: dw=np.exp(-(R-r).^2/(2.*sig^2)).*((R-r).^2-sig.^2)./sig.^4/sqrt(2*pi);
-     sig=incognita[1]
-     da=incognita[3]*sig*sig
-     ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
-     ro2=(xdata-incognita[0])/sig
-     ro3=4*incognita[4]  # b is R0/(Hs), 4*b is R0/sig
+    noise  =data[5]
+    min_gate=data[6]
+    max_gate=data[7]
+    weights=data[8]
+    costfun=data[9]
+    PTR = data[10]
+    
+    # Matlab version: dw=np.exp(-(R-r).^2/(2.*sig^2)).*((R-r).^2-sig.^2)./sig.^4/sqrt(2*pi);
+    sig=incognita[1]
+    da=incognita[3]*sig*sig
+    ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
+    ro2=(xdata-incognita[0])/sig
+    ro3=4*incognita[4]  # b is R0/(Hs), 4*b is R0/sig
 
-     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/(sig*sig)/np.sqrt(2*np.pi)
-     dd=da*dw
+    dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/(sig*sig)/np.sqrt(2*np.pi)
+    dd=da*dw
  
-     ff0 = noise+ 0.5 *( 1+sps.erf( ros ) ) +  dd 
-     if PTR[0] < 1:
-        fff =fftconvolve(ff0,PTR,mode='same')
-     else:
-        fff=ff0
+    ff0 = noise+ 0.5 *( 1+sps.erf( ros ) ) +  dd 
+    if PTR[0] < 1:
+       fff =fftconvolve(ff0,PTR,mode='same')
+    else:
+       fff=ff0
 
-     if costfun=='LS':
-        cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
-     else:
-        ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
-        cy= ( ratio - np.log(ratio)).sum()
+    if costfun=='LS':
+       cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
+    else:
+       ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
+       cy= ( ratio - np.log(ratio)).sum()
 
-     return cy
-
-
-
-
+    return cy
 
 ######################  Defines waveform theoretical models: brown from WHALES code 
 def  wf_brown_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
+    '''
+    Define a waveform as in the WHALES code.
+    Based on a Brown model.
+    inputs :
+            - xdata : range gates
+            - incognita : (3,) vector with [0] = epoch, [1] = Hs, [2] = amplitude
+            - noise : thermal noise
+            - Gamma : coeff with antenna bandwidth (gamma in Tourain et al. 2020)
+            - Zeta : off nadir pointing angle (= mispointing)
+            - c_xi : 4 c /(G * h) (with G = Gamma in Tourain et al. 2020)
+            - tau : not used (sampling period such as SigmaP=0.513*tau related to PTR width)
+            - PTR : optionnal PTR
+    output : - waveform
+    '''
 # This is Jean's MLE 
 #A =  0.5*exp(-4*X/gamma)*sig0;
 #if ordre==1
@@ -149,130 +218,130 @@ def  wf_brown_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
 #    modele = modele1 + Bt;
 
 
-     #ff0 = xdata*0
-     ff0=noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
-     * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
-     *   (  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
-     )
-     if PTR[0] < 1:
-        fff =fftconvolve(ff0,PTR,mode='same')
-     else:
-        fff=ff0
+    #ff0 = xdata*0
+    ff0=noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
+    * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
+    *   (  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
+    )
+    if PTR[0] < 1:
+       fff =fftconvolve(ff0,PTR,mode='same')
+    else:
+       fff=ff0
 
-     return fff
+    return fff
 
 def  wf_brown(incognita,data)  :
-     """
-     returns the least-square distance between the waveform data[0] and the theoretical 
-     Brown-Hayne functional form, The unknown parameters in this version (17 Dec 2013) are Epoch, Sigma and Amplitude, where 
-     sigma=( sqrt( (incognita(2)/(2*0.3)) ^2+SigmaP^2) ) is the rising time of the leading edge
-     
-     For the explanation of the terms in the equation, please check "Coastal Altimetry" Book
-     
-     """
-     
-     ydata =data[0] #Waveform coefficients
-     Gamma =data[1]
-     Zeta  =data[2]
-     xdata =data[3]  #Epoch
-     c_xi  =data[4]  #Term related to the slope of the trailing edge
-     noise  =data[5]
-     min_gate=data[6]
-     max_gate=data[7]
-     weights=data[8]
-     costfun=data[9]
-     PTR = data[10]
-               
-     ff0 = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
-     * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
-     *   (  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
-     )
-     if PTR[0] < 1:
-        fff =fftconvolve(ff0,PTR,mode='same')
-     else:
-        fff=ff0
+    """
+    returns the least-square distance between the waveform data[0] and the theoretical 
+    Brown-Hayne functional form, The unknown parameters in this version (17 Dec 2013) are Epoch, Sigma and Amplitude, where 
+    sigma=( sqrt( (incognita(2)/(2*0.3)) ^2+SigmaP^2) ) is the rising time of the leading edge
+    
+    For the explanation of the terms in the equation, please check "Coastal Altimetry" Book
+    
+    """
+    
+    ydata =data[0] #Waveform coefficients
+    Gamma =data[1]
+    Zeta  =data[2]
+    xdata =data[3]  #Epoch
+    c_xi  =data[4]  #Term related to the slope of the trailing edge
+    noise  =data[5]
+    min_gate=data[6]
+    max_gate=data[7]
+    weights=data[8]
+    costfun=data[9]
+    PTR = data[10]
+             
+    ff0 = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
+    * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
+    *   (  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
+    )
+    if PTR[0] < 1:
+       fff =fftconvolve(ff0,PTR,mode='same')
+    else:
+       fff=ff0
   
     
-#        cy= (   weights *  ((ydata - fff) **2)).sum()
-     if costfun=='LS':
-        cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
-     else:
-        ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
-        cy= ( ratio - np.log(ratio)).sum()
-     
-     return cy
+#       cy= (   weights *  ((ydata - fff) **2)).sum()
+    if costfun=='LS':
+       cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
+    else:
+       ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
+       cy= ( ratio - np.log(ratio)).sum()
+    
+    return cy
 
 ######################  Defines waveform theoretical models: brown from WHALES code + wave groups
 def  wf_bro4D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
-     sig=incognita[1]
-     da=incognita[3]
-     ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
-     ro2=(xdata-incognita[0])/sig
-     ro3=4*incognita[4]  # b is R0/(Hs), 4*b is R0/sig
+    sig=incognita[1]
+    da=incognita[3]
+    ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
+    ro2=(xdata-incognita[0])/sig
+    ro3=4*incognita[4]  # b is R0/(Hs), 4*b is R0/sig
 
-     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/np.sqrt(2*np.pi)
-     dd=da*dw
+    dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/np.sqrt(2*np.pi)
+    dd=da*dw
 
-#     ff0 = noise+ 0.5 *( 1+sps.erf( ros ) ) +  dd 
-     ff0 = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
-     * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
-     *   (2*dd + 1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
-     )
-     if PTR[0] < 1:
-        fff =fftconvolve(ff0,PTR,mode='same')
-     else:
-        fff=ff0
+#    ff0 = noise+ 0.5 *( 1+sps.erf( ros ) ) +  dd 
+    ff0 = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
+    * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
+    *   (2*dd + 1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
+    )
+    if PTR[0] < 1:
+       fff =fftconvolve(ff0,PTR,mode='same')
+    else:
+       fff=ff0
 
-     return fff
+    return fff
 
 def  wf_bro4D(incognita,data)  :
-     """
-     returns the least-square distance between the waveform data[0] and the theoretical 
-     Brown-Hayne functional form, The unknown parameters in this version (17 Dec 2013) are Epoch, Sigma and Amplitude, where 
-     sigma=( sqrt( (incognita(2)/(2*0.3)) ^2+SigmaP^2) ) is the rising time of the leading edge
-     
-     For the explanation of the terms in the equation, please check "Coastal Altimetry" Book
-     
-     """
-     
-     ydata =data[0] #Waveform coefficients
-     Gamma =data[1]
-     Zeta  =data[2]
-     xdata =data[3]  #Epoch
-     c_xi  =data[4]  #Term related to the slope of the trailing edge
-     noise  =data[5]
-     min_gate=data[6]
-     max_gate=data[7]
-     weights=data[8]
-     costfun=data[9]
-     PTR = data[10]
-     
-     sig=incognita[1]
-     da=incognita[3]
-     ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
-     ro2=(xdata-incognita[0])/sig
-     ro3=4*incognita[4]  # b is R0/(Hs), 4*b is R0/sig
+    """
+    returns the least-square distance between the waveform data[0] and the theoretical 
+    Brown-Hayne functional form, The unknown parameters in this version (17 Dec 2013) are Epoch, Sigma and Amplitude, where 
+    sigma=( sqrt( (incognita(2)/(2*0.3)) ^2+SigmaP^2) ) is the rising time of the leading edge
+    
+    For the explanation of the terms in the equation, please check "Coastal Altimetry" Book
+    
+    """
+    
+    ydata =data[0] #Waveform coefficients
+    Gamma =data[1]
+    Zeta  =data[2]
+    xdata =data[3]  #Epoch
+    c_xi  =data[4]  #Term related to the slope of the trailing edge
+    noise  =data[5]
+    min_gate=data[6]
+    max_gate=data[7]
+    weights=data[8]
+    costfun=data[9]
+    PTR = data[10]
+    
+    sig=incognita[1]
+    da=incognita[3]
+    ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
+    ro2=(xdata-incognita[0])/sig
+    ro3=4*incognita[4]  # b is R0/(Hs), 4*b is R0/sig
 
-     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/np.sqrt(2*np.pi)
-     dd=da*dw
+    dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/np.sqrt(2*np.pi)
+    dd=da*dw
 
-     ff0 = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
-     * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
-     *   (2*dd+  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
-     )
-     if PTR[0] < 1:
-        fff =fftconvolve(ff0,PTR,mode='same')
-     else:
-        fff=ff0
+    ff0 = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
+    * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
+    *   (2*dd+  1+scipy.special.erf( ((xdata-incognita[0])-c_xi*incognita[1]**2)/((np.sqrt(2)*incognita[1]))  ) ) \
+    )
+    if PTR[0] < 1:
+       fff =fftconvolve(ff0,PTR,mode='same')
+    else:
+       fff=ff0
 
     
-     if costfun=='LS':
-        cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
-     else:
-        ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
-        cy= ( ratio - np.log(ratio)).sum()
-     
-     return cy
+    if costfun=='LS':
+       cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
+    else:
+       ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
+       cy= ( ratio - np.log(ratio)).sum()
+    
+    return cy
 
 
 ######################
@@ -674,62 +743,62 @@ def fly_over_track_only_retrack(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edges_r
         
     return Hs_retrack,Xalt,Yalt,waveforms,dist
 
-	
+    
 
 def fly_over_track_v0(X,Y,S1,nsamp,nxa,di,wfm_ref,Hsm_ref,edges_ref,radi,radi1,radi2,alti_sat,range_shift):
-        # radi = 4000     # radius used to compute waveform
-        #radi1 = 900     # inner radius for Hs average
-        #radi2 = 1200    # outer radius for Hs average
-        nHs    = len(Hsm_ref)
-        ny_mid = len(np.unique(Y))//2
-        Xalt = np.zeros((nsamp,1))
-        Hs_retrack = np.zeros((nsamp,1))
-        ind_retrack = np.zeros((nsamp,1))
-        Hs_std = np.zeros((nsamp,1))
-        Hs_stdbis = np.zeros((nsamp,1))
-        Hs_std2 = np.zeros((nsamp,1))
-        waveforms=np.zeros((nsamp,len(edges_ref)-1))
-        dist     =np.zeros((nsamp,nHs))
+    # radi = 4000     # radius used to compute waveform
+    #radi1 = 900     # inner radius for Hs average
+    #radi2 = 1200    # outer radius for Hs average
+    nHs    = len(Hsm_ref)
+    ny_mid = len(np.unique(Y))//2
+    Xalt = np.zeros((nsamp,1))
+    Hs_retrack = np.zeros((nsamp,1))
+    ind_retrack = np.zeros((nsamp,1))
+    Hs_std = np.zeros((nsamp,1))
+    Hs_stdbis = np.zeros((nsamp,1))
+    Hs_std2 = np.zeros((nsamp,1))
+    waveforms=np.zeros((nsamp,len(edges_ref)-1))
+    dist     =np.zeros((nsamp,nHs))
 
-        # Footprint definition 
-        dx = X[1]-X[0]
-        dy = Y[1]-Y[0]
-        footprint=np.ones((2*nxa+1,2*nxa+1))
-        footprint1=np.ones((2*nxa+1,2*nxa+1))
-        footprint2=np.ones((2*nxa+1,2*nxa+1))
+    # Footprint definition 
+    dx = X[1]-X[0]
+    dy = Y[1]-Y[0]
+    footprint=np.ones((2*nxa+1,2*nxa+1))
+    footprint1=np.ones((2*nxa+1,2*nxa+1))
+    footprint2=np.ones((2*nxa+1,2*nxa+1))
 
-        [Xa,Ya]=np.meshgrid(dx*np.arange(-nxa,nxa+1), dy*np.arange(-nxa,nxa+1))
-        dist_ground = (Xa**2+Ya**2)
-        footprint[dist_ground > radi **2]=0
-        footprint1[dist_ground > radi1**2]=0
-        footprint2[dist_ground > radi2**2]=0
-        footprint2[dist_ground < radi1**2]=0
+    [Xa,Ya]=np.meshgrid(dx*np.arange(-nxa,nxa+1), dy*np.arange(-nxa,nxa+1))
+    dist_ground = (Xa**2+Ya**2)
+    footprint[dist_ground > radi **2]=0
+    footprint1[dist_ground > radi1**2]=0
+    footprint2[dist_ground > radi2**2]=0
+    footprint2[dist_ground < radi1**2]=0
 
-        for isamp in range(nsamp):
-           ialt=(nxa+isamp*di).astype(int)
-           Xalt[isamp] = X[ialt]
-           surf=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint
-           surf1=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint1
-           surf2=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint2
-           # spatial averaging of Hs : disc < radi1 et annulus from radi1 to radi2
-           Hs_std [isamp] = 4*np.std(surf1)/np.sqrt(np.mean(footprint1))
-           surf1bis=np.nan*np.ones(surf1.shape)
-           surf1bis[footprint1>0]=surf1[footprint1>0]
-           Hs_stdbis [isamp] = 4*np.nanstd(surf1bis)
-           Hs_std2[isamp] = 4*np.std(surf2)/np.sqrt(np.mean(footprint2))
+    for isamp in range(nsamp):
+        ialt=(nxa+isamp*di).astype(int)
+        Xalt[isamp] = X[ialt]
+        surf=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint
+        surf1=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint1
+        surf2=S1[ny_mid-nxa:ny_mid+nxa+1,ialt-nxa:ialt+nxa+1]*footprint2
+        # spatial averaging of Hs : disc < radi1 et annulus from radi1 to radi2
+        Hs_std [isamp] = 4*np.std(surf1)/np.sqrt(np.mean(footprint1))
+        surf1bis=np.nan*np.ones(surf1.shape)
+        surf1bis[footprint1>0]=surf1[footprint1>0]
+        Hs_stdbis [isamp] = 4*np.nanstd(surf1bis)
+        Hs_std2[isamp] = 4*np.std(surf2)/np.sqrt(np.mean(footprint2))
 
-           # r is distance to satellite = range + shift 
-           r=np.sqrt(Xa**2+Ya**2+(alti_sat-surf)**2)-alti_sat+range_shift
-           r[dist_ground > radi**2]=np.nan  # equivalent to multiplication by footprint
+        # r is distance to satellite = range + shift 
+        r=np.sqrt(Xa**2+Ya**2+(alti_sat-surf)**2)-alti_sat+range_shift
+        r[dist_ground > radi**2]=np.nan  # equivalent to multiplication by footprint
 
-           dr = edges_ref[1]-edges_ref[0]
-           Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
-           counts,_=np.histogram(r,bins=edges_ref)
-           waveform=counts/Apix
-#	   Hs_retrack[isamp]             = simple_retracking_process   (counts,edges_ref,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ispolyfit=0) 
-           Hs_retrack[isamp],ind_retrack[isamp],dist[isamp] =simple_retracking_process_v01(waveform,edges_ref,max_edg=25,nHs=251,\
+        dr = edges_ref[1]-edges_ref[0]
+        Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
+        counts,_=np.histogram(r,bins=edges_ref)
+        waveform=counts/Apix
+#       Hs_retrack[isamp]             = simple_retracking_process   (counts,edges_ref,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ispolyfit=0) 
+        Hs_retrack[isamp],ind_retrack[isamp],dist[isamp] =simple_retracking_process_v01(waveform,edges_ref,max_edg=25,nHs=251,\
                                   offset=10,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ispolyfit=0,isepoch=0)
-           waveforms[isamp,:]=waveform
+        waveforms[isamp,:]=waveform
 
 #def simple_retracking_process_v01(wfm,edges,max_edg=25,nHs=251,alti_sat=519*1e3,\
 #                                  dx=10,offset=10,wfm_ref=None,Hsm_ref=None,ispolyfit=0,isepoch=0):
@@ -885,8 +954,15 @@ def simu_waveform_erf(X,Y,S1,nsampx,nsampy,nxa0,nxa,di,ranges,range_offset=10,\
     r2=Xa0**2+Ya0**2
     # Uses 2-way antenna pattern to reduce backscattered power 
     power=np.exp(-4*(r2/alti_sat**2)*(1+alti_sat/Ri)/Gamma) 
-
-           
+    # ----------------------------------------------------
+    # -- Comes from FSSR(t): -----------------------------
+    # FSSR(t) = A * P * exp ( -ct/h * (4/Gamma)) * I0(beta* t**0.5) 
+    # ct = 2 * distance
+    # when flat Earth : 
+    # distance = np.sqrt(alti_sat**2+r2) ~ alti_sat *( 1 + 0.5* r2/alti_sat**2)
+    # when spherical Earth :
+    # distance = np.sqrt(alti_sat**2 + r2*(1 + alti_sat/Ri)) ~ alti_sat *( 1 + 0.5 * r2/alti_sat**2 * (1+alti_sat/Ri)
+     
     for isampx in range(nsampx):
         if nsampy > 1:
            print('Generating waveform',isampx,' over ',nsampx,' ------------ ')
