@@ -42,7 +42,8 @@ def  wf_erf2D_eval(xdata,incognita,noise,Gamma=0,Zeta=0,c_xi=0,tau=0,PTR=0)  :
             - PTR : optionnal PTR
     output : - waveform
     '''
-    ff0 = noise+ 0.5 * ( 1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])))
+    Amp = incognita[2]/2 # 0.5
+    ff0 = noise+ Amp * ( 1+sps.erf( (xdata-incognita[0])/(np.sqrt(2)*incognita[1])))
     
     if PTR[0] < 1:
        fff =fftconvolve(ff0,PTR,mode='same')
@@ -120,6 +121,7 @@ def  wf_erf4D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
     output : - waveform
     '''
     sig = incognita[1]
+    Amp = incognita[2]/2 # 0.5
     da = incognita[3]*sig*sig
     ros = (xdata-incognita[0])/(np.sqrt(2)*sig)
     ro2 = (xdata-incognita[0])/sig
@@ -128,7 +130,7 @@ def  wf_erf4D_eval(xdata,incognita,noise,Gamma,Zeta,c_xi,tau,PTR)  :
     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/(sig*sig)/np.sqrt(2*np.pi)
     dd=da*dw
     
-    ff0 = noise+ 0.5 * (  1+sps.erf( ros  ) )+dd 
+    ff0 = noise+  Amp * (  1+sps.erf( ros  ) )+dd 
     if PTR[0] < 1:
        fff =fftconvolve(ff0,PTR,mode='same')
     else:
@@ -166,6 +168,7 @@ def  wf_erf4D(incognita,data)  :
     PTR = data[10]
     
     # Matlab version: dw=np.exp(-(R-r).^2/(2.*sig^2)).*((R-r).^2-sig.^2)./sig.^4/sqrt(2*pi);
+    Amp = incognita[2]/2 #0.5
     sig=incognita[1]
     da=incognita[3]*sig*sig
     ros=(xdata-incognita[0])/(np.sqrt(2)*sig)
@@ -175,7 +178,7 @@ def  wf_erf4D(incognita,data)  :
     dw=np.exp(-0.5*(ro2-ro3)**2)*((ro2-ro3)**2-1)/(sig*sig)/np.sqrt(2*np.pi)
     dd=da*dw
  
-    ff0 = noise+ 0.5 *( 1+sps.erf( ros ) ) +  dd 
+    ff0 = noise+ Amp *( 1+sps.erf( ros ) ) +  dd 
     if PTR[0] < 1:
        fff =fftconvolve(ff0,PTR,mode='same')
     else:
