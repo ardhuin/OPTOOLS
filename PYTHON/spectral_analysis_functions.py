@@ -31,6 +31,7 @@ def FFT2D_one_array(arraya,dx,dy,n,isplot=0):
 
     ### --- prepare wavenumber vectors -------------------------
     kx=np.fft.fftshift(np.fft.fftfreq(nxtile, dx)) # wavenumber in cycles / m
+    #print('NXt:',nxtile,1000/(dx*nxtile),1000/(dy*nytile))
     ky=np.fft.fftshift(np.fft.fftfreq(nytile, dy)) # wavenumber in cycles / m
     kx2,ky2 = np.meshgrid(kx,ky, indexing='ij')
     if isplot:

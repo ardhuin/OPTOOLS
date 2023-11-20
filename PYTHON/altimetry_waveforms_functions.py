@@ -725,7 +725,7 @@ def fly_over_track_only_retrack(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edges_r
     Apix = np.pi*2*alti_sat*dr / (dx**2) # The area of a ring, in terms of pixels 
 
     for isampx in range(nsamp):
-        print('------------ ',isampx,' over ',nsamp-1,' ------------ ')
+        print('------------ ',isampx,' out of ',nsamp-1,' ------------ ')
         for isampy in range(nsamp-1):
             ialtx=(nxa0+isampx*di).astype(int)
             ialty=(nxa0+isampy*di).astype(int)
@@ -886,7 +886,7 @@ def fly_over_track_only_retrack_2D(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edge
 
     
     for isampx in range(nsamp):
-        print('------------ ',isampx,' over ',nsamp-1,' ------------ ')
+        print('------------ ',isampx,' out of ',nsamp-1,' ------------ ')
         for isampy in range(nsamp-1):
             ialtx=(nxa0+isampx*di).astype(int)
             ialty=(nxa0+isampy*di).astype(int)
@@ -968,7 +968,7 @@ def simu_waveform_erf(X,Y,S1,nsampx,nsampy,nxa0,nxa,di,ranges,range_offset=10,\
      
     for isampx in range(nsampx):
         if nsampy > 1:
-           print('Generating waveform',isampx,' over ',nsampx,' ------------ ')
+           print('Generating waveform',isampx,' out of ',nsampx,' ------------ ')
         else:
            shifty1=ny/2-nxa0
            stepy=0
@@ -984,7 +984,7 @@ def simu_waveform_erf(X,Y,S1,nsampx,nsampy,nxa0,nxa,di,ranges,range_offset=10,\
             r=np.sqrt(r2+(alti_sat-surf1)**2)-alti_sat+range_offset
             #print(isampx,isampy,ialtx,ialty,np.max(r),np.min(r))
             # --- histogram counts the number of data points between edges ...
-            #     modified by FA to center the range values
+            #     modified by FA to center the range values. note that thre is no PTR effect here
             counts,_=np.histogram(r,bins=ranges-dr2,weights=power)
             waveform=counts/Apix
             waveforms[isampx,isampy,:]=waveform
