@@ -8,7 +8,33 @@ import numpy as np
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from scipy import signal
 
+def FFT1D_two_arrays(arraya,arrayb,dx,isplot=0,fftaxis=0):
+    [nxa,nya]=np.shape(arraya)
+    array1=np.double(arraya)
+    array2=np.double(arrayb)
+    kx=np.fft.fftfreq(nxa, dx) # wavenumber in cycles / m
+    dkxtile=1/(dx*nxa)  
+    hanningx=(0.5 * (1-np.cos(2*np.pi*np.linspace(0,nxa-1,nxa)/(nxa-1))))
+    hanningx2=np.tile(hanningx,(nya,1)).T
+    fig,axs=plt.subplots(1,2,figsize=(11.2,7))#,sharey=True,sharex=True)
+    
+    wc2x=1/np.mean(hanningx**2);                              # window correction factor
+    normalization = (wc2x)/(dkxtile)
+    tile_centered=signal.detrend(array1,axis=fftaxis) 
+    tile_by_windows = (tile_centered)*hanningx2
+    tileFFT1 = np.fft.fft(tile_by_windows,norm="forward",axis=fftaxis)
+    tile_centered=signal.detrend(array2,axis=fftaxis) 
+    tile_by_windows = (tile_centered)*hanningx2
+    tileFFT2 = np.fft.fft(tile_by_windows,norm="forward",axis=fftaxis)
+    
+    Eta=  np.mean( (abs(tileFFT1)**2),axis=1-fftaxis) *normalization #   
+    Etb=  np.mean( (abs(tileFFT2)**2),axis=1-fftaxis) *normalization #   
+    phase=np.mean(tileFFT2*np.conj(tileFFT1),axis=1-fftaxis) *normalization
+    coh=abs((phase)**2)/(Eta*Etb)      # spectral coherence
+    ang=np.angle(phase)
+    return Eta[0:nxa//2],Etb[0:nxa//2],ang[0:nxa//2],coh[0:nxa//2],kx[0:nxa//2],dkxtile
 
 
 def FFT2D_one_array(arraya,dx,dy,n,isplot=0):

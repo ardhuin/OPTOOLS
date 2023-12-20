@@ -11,7 +11,7 @@ from scipy.optimize import minimize
 from scipy.signal import fftconvolve
 
 
-def calc_footprint_diam(Hs,pulse_width = 1/(320*1e6),Rorbit=519*1e3,Rearth = 6370*1e3):
+def calc_footprint_diam(Hs,Rorbit,Earth_sphericity_coeff=1.,bandwidth=320*1e6):
     '''
     function to compute Chelton's Diameter (Chelton et al. 1989)
     inputs : 
@@ -22,7 +22,7 @@ def calc_footprint_diam(Hs,pulse_width = 1/(320*1e6),Rorbit=519*1e3,Rearth = 637
     output : - Chelton's Diameter (m) 
     '''
     clight= 299792458
-    Airemax_div_pi = Rorbit*(clight*pulse_width + 2 * Hs)/(1+(Rorbit/Rearth))
+    Airemax_div_pi = Rorbit*(clight/bandwidth + 2 * Hs)/Earth_sphericity_coeff
     return 2*np.sqrt(Airemax_div_pi)
 
 
@@ -254,6 +254,7 @@ def  wf_brown(incognita,data)  :
     weights=data[8]
     costfun=data[9]
     PTR = data[10]
+    thr=1E-5 
              
     ff0 = noise+( incognita[2]/2*np.exp((-4/Gamma)*(np.sin(Zeta))**2) \
     * np.exp (-  c_xi*( (xdata-incognita[0])-c_xi*incognita[1]**2/2) ) \
@@ -269,7 +270,7 @@ def  wf_brown(incognita,data)  :
     if costfun=='LS':
        cy= (   ((ydata[min_gate:max_gate] - fff[min_gate:max_gate]) **2)).sum()
     else:
-       ratio = np.divide(ydata[min_gate:max_gate]+1.e-5,fff[min_gate:max_gate]+1.e-5) 
+       ratio = np.divide(ydata[min_gate:max_gate]+thr,fff[min_gate:max_gate]+thr) 
        cy= ( ratio - np.log(ratio)).sum()
     
     return cy
@@ -348,11 +349,11 @@ def  wf_bro4D(incognita,data)  :
 
 
 ######################
-def wf_eval(ranges,inputpar,clight,wf_model,tau=2.5,nominal_tracking_gate=30,noise=0.,alti_sat=None,mispointing=0.,theta3dB=1.,PTR_model='Gauss',PTR=([1.])):
+def wf_eval(ranges,inputpar,clight,wf_model,tau=2.5,nominal_tracking_gate=30,noise=0.,alti_sat=None,mispointing=0.,theta3dB=1.,PTR_model='Gauss',PTR=([1.]),Earth_sphericity_coef=1):
     stonano=1000000000
     rtot=2*stonano/clight
     SigmaP=0.513*tau
-    Ri=6378.1363*(10**3)      #Earth radius
+    #Ri=6378.1363*(10**3)      #Earth radius
 
     Zeta=mispointing
     Gamma =(np.sin(theta3dB))**2/(np.log(2)*2)
@@ -361,7 +362,7 @@ def wf_eval(ranges,inputpar,clight,wf_model,tau=2.5,nominal_tracking_gate=30,noi
 ##############"""" WARNING: mispoiting below should be in radians ... hence Zeta ?? 
 
     b_xi = np.cos (2*mispointing) - ((np.sin(2*mispointing))**2)/Gamma
-    c_xi=b_xi* ( (4/Gamma)*(clightn/alti_sat) * 1/(1+alti_sat/Ri))
+    c_xi=b_xi* ( (4/Gamma)*(clightn/alti_sat) * 1/Earth_sphericity_coef)
 
     incognita=inputpar
     xdata=ranges*(2./clight)*stonano
@@ -395,6 +396,7 @@ noise=0.,tau=2.5,costfun='LS',nominal_tracking_time=64*2.5,method='Nelder-Mead',
     elif wf_fun =='wf_bro4D':
       incognita=np.array([nominal_tracking_time,2.5*rtot,1e-6,0,0]) # initial conditions: could use previous waveform ... 
 
+    
     xopt = minimize(eval(wf_fun), incognita, args=((wfm,Gamma,Zeta,times,c_xi,noise,min_gate,max_gate,weights,costfun,PTR),),\
                     method=method,options={'disp': False})
 # bounds=((-4*rtot,4*rtot),(0.0,2.5*rtot)),
@@ -622,13 +624,14 @@ def generate_wvform_database(nHs,dr=None,ne=None,bandwidth=320*1e6,\
 def retrack_waveforms(waveforms,ranges,max_range_fit,clight,mispointing=0.,theta3dB=1., min_range_fit=0,\
                       wfm_ref=None,Hsm_ref=None,ze_ref=None,\
                       min_method='gridsearch',wf_model='erf2D',PTR_model='Gauss',PTR=([1.]),\
-                      costfun='LS',alti_sat=519*1e3,Theta=1.,tau=2.5,nominal_tracking_gate=30):
+                      costfun='LS',alti_sat=519*1e3,Theta=1.,tau=2.5,nominal_tracking_gate=30,min_gate_rat=0,Earth_sphericity_coeff=1.):
     #############################
+    # WARNING , for real data use: Earth_sphericity_coeff = (1+alti_sat/Ri)
     #  tau : duration of range gate in nsec 
     nxw,nyw,nr=np.shape(waveforms)
     
     print('size of waveforms array:',nxw,nyw,nr)
-    Ri=6378.1363*(10**3)      #Earth radius
+    #Ri=6378.1363*(10**3)      #Earth radius
     stonano=1000000000
     rtot=(2./clight)*stonano  #Converts range to time
 
@@ -655,26 +658,31 @@ def retrack_waveforms(waveforms,ranges,max_range_fit,clight,mispointing=0.,theta
         print('Retracking waveforms',ix,' out of ',nxw,' ------------ ')
         for iy in range(nyw):
             wfm=waveforms[ix,iy,:]
+            min_gate2=min_range_fit
+            maxwfm=max(wfm)
+            inds=np.where(wfm < min_gate_rat*maxwfm)[0]
+            if len(inds) > 0:
+               min_gate2=max(np.argmax(inds),min_range_fit)
             b_xi = np.cos (2*mispointing[ix,iy]) - ((np.sin(2*mispointing[ix,iy]))**2)/Gamma
-            c_xi=b_xi* ( (4/Gamma)*(clightn/alti_sat) * 1/(1+alti_sat/Ri))
+            c_xi=b_xi* ( (4/Gamma)*(clightn/alti_sat) * 1/Earth_sphericity_coeff)
             if min_method == 'gridsearch':
                Sigma,t0,di_r[ix,iy]=simple_retracking_process_2params(wfm,\
                                   max_edg=max_range_fit,nHs=250,nze=251,wfm_ref=wfm_ref,Hsm_ref=Hsm_ref,ze_ref=ze_ref,costfun=costfun)
             elif min_method in [ 'Nelder-Mead','Newton-CG']:
                Sigma,t0,Pu_r[ix,iy],da_r[ix,iy],R0_r[ix,iy],di_r[ix,iy]=retracking_NM(wfm, times,rtot,wf_model,
-                                                              min_gate=min_range_fit,max_gate=max_range_fit,noise=noise,tau=tau, Gamma=Gamma,Zeta=mispointing[ix,iy], \
-                                                              c_xi=c_xi,nominal_tracking_time=timeshift,method=min_method,costfun=costfun,PTR=PTR)
+                                        min_gate=min_gate2,max_gate=max_range_fit,noise=noise,tau=tau, Gamma=Gamma,Zeta=mispointing[ix,iy], \
+                                        c_xi=c_xi,nominal_tracking_time=timeshift,method=min_method,costfun=costfun,PTR=PTR)
             elif min_method == 'pyramid2':
                Sigma,t0,di_r[ix,iy],                                  =retracking_pyramid2(wfm,times,rtot,wf_model,\
-                 min_gate=min_range_fit,max_gate=max_range_fit,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
+                 min_gate=min_gate2,max_gate=max_range_fit,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
                                                     c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun,PTR=PTR)
             elif min_method == 'pyramid3':
                Sigma,t0,Pu_r[ix,iy],da_r[ix,iy],R0_r[ix,iy],di_r[ix,iy]=retracking_pyramid3(wfm,times,rtot,wf_model,\
-                 min_gate=min_range_fit,max_gate=max_range_fit,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
+                 min_gate=min_gate2,max_gate=max_range_fit,noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
                                                     c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun,PTR=PTR)
             elif min_method == 'pyramid4':
                Sigma,t0,Pu_r[ix,iy],da_r[ix,iy],R0_r[ix,iy],di_r[ix,iy]=retracking_pyramid4(wfm,times,rtot,wf_model,\
-                 min_gate=min_range_fit,max_gate=max_range_fit, noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
+                 min_gate=min_gate2,max_gate=max_range_fit, noise=noise,tau=tau,Gamma=Gamma,Zeta=mispointing[ix,iy],\
                                                     c_xi=c_xi,nominal_tracking_time=timeshift,costfun=costfun,PTR=PTR)
             if PTR_model == 'Gauss':              
                #print('TEST1:',Sigma*4/rtot,np.sqrt(Sigma**2- SigmaP**2)*4/rtot)
@@ -915,7 +923,7 @@ def fly_over_track_only_retrack_2D(X,Y,S1,nsamp,nxa0,nxa,di,wfm_ref,Hsm_ref,edge
 
 ######### compute simulated waveforms #####################################
 def simu_waveform_erf(X,Y,S1,nsampx,nsampy,nxa0,nxa,di,ranges,range_offset=10,\
-                       alti_sat=519*1e3,Gamma=1.):
+                       alti_sat=519*1e3,Gamma=1.,Earth_sphericity_coeff = 1.):
 #
 #  WARNING: RIGHT NOW THIS IS A FLAT EARTH APPROXIMATION ... 
 #  
@@ -944,10 +952,19 @@ def simu_waveform_erf(X,Y,S1,nsampx,nsampy,nxa0,nxa,di,ranges,range_offset=10,\
     ny=len(Y)
     stepy=1
     shifty1=0
-    Ri=6378.1363*(10**3) #Earth radius
+    #Ri=6378.1363*(10**3) #Earth radius
+
+  
+# Corrections from M. De Carlo
+    #c_xi = b_xi* ( (4/Gamma)*(clight/(s_to_nano*alti_sat))) / Earth_sphericity_coeff
+    #power = np.exp(-((4*rho2)/(alti_sat**2*Gamma)) * Earth_sphericity_coeff)
+    #Apix = (np.pi*2*alti_sat* dr / (Earth_sphericity_coeff * dx**2))# The area of a ring, in terms of pixels
+    #[Xa0,Ya0] = np.meshgrid(np.arange(-nxa,nxa+1),np.arange(-nxa,nxa+1),indexing='xy')
+    #rho2 = (dx*Xa0)**2 + (dy*Ya0)**2
+    #dist = - surf1 +  rho2*Earth_sphericity_coeff / (2*alti_sat))  
       
     # --- Footprint definition For std(surface) --------------------
-    [Xa0,Ya0]=np.meshgrid(dx*np.arange(-nxa,nxa+1), dy*np.arange(-nxa,nxa+1))
+    [Xa0,Ya0]=np.meshgrid(dx*np.arange(-nxa,nxa+1), dy*np.arange(-nxa,nxa+1),indexing='xy')
     dist_ground = (Xa0**2+Ya0**2)
     
     dr = ranges[1]-ranges[0]
@@ -956,7 +973,7 @@ def simu_waveform_erf(X,Y,S1,nsampx,nsampy,nxa0,nxa,di,ranges,range_offset=10,\
 
     r2=Xa0**2+Ya0**2
     # Uses 2-way antenna pattern to reduce backscattered power 
-    power=np.exp(-4*(r2/alti_sat**2)*(1+alti_sat/Ri)/Gamma) 
+    power=np.exp(-4*(r2/alti_sat**2)*Earth_sphericity_coeff/Gamma) 
     # ----------------------------------------------------
     # -- Comes from FSSR(t): -----------------------------
     # FSSR(t) = A * P * exp ( -ct/h * (4/Gamma)) * I0(beta* t**0.5) 
