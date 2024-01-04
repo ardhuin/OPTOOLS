@@ -1,13 +1,17 @@
-
-
 # OPTOOLS
+Some ocean processing and simulation tools, initially designed to work with optical imagery ... but expanded to work with altimetry, CFOSAT, SWOT. Their common point: use of geometrical optics approximation for investigating / processing the effects of wind-generated surface gravity waves in various types of data.
 
-processing and simulation tools for optical imagery: looking at ocean waves & currents 
-This "OPTOOLS" folder contains miscellaneous simulation / analysis tools of image sequences. 
-It was initially set up to investigate anomalies in phase speeds estimated from Sentinel-2 B02-B04 pairs, 
-as described in Ardhuin et al. (JGR 2021). 
+Main contributors: 
+Fabrice Ardhuin 
+Marine De Carlo
 
-Some of the matlab code was later modified to contribute to the design of STREAM-O (proposal to ESA EE11). 
+These tools have been used for the following papers: 
+
+https://doi.org/10.1029/2021JC017342   Total Surface Current Vector and Shear from a Sequence of Satellite images: Effect of Waves in Opposite Directions
+
+https://doi.org/10.1029/2023JC019740   Wave groups and small scale variability of wave heights observed by altimeters
+
+https://doi.org/10.13140/RG.2.2.17300.27529            Along-track resolution and uncertainty of altimeter-derived wave height and sea level: re-defining the significant wave height in extreme storms
 
 
 ## Installation 
@@ -142,5 +146,4 @@ For open source projects, say how it is licensed.
 
 ## Project status
 If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
-
 
