@@ -4,6 +4,8 @@ import os, glob
 import rasterio
 from s2_and_sun_angs  import *
 from rasterio.windows import Window
+import matplotlib.pyplot as plt
+from rasterio import plot
 
 def find(name, path):
     for root, dirs, files in os.walk(path):
@@ -29,19 +31,24 @@ def S2_read(S2path,boxi,bands):
     #print('AngleSun:',AngleSun)
 
     for jp2_band in bands:
-        files=glob.glob(os.path.join(S2path,'GRANULE/*/*/*'+jp2_band+'*.jp2'))
+        files=glob.glob(os.path.join(S2path,'GRANULE/*/IMG_DATA/*'+jp2_band+'*.jp2'))
         S2file=files[0]
         print('Reading file for band ',jp2_band,':',S2file)
         #dataset = rasterio.open(S2file+'_'+jp2_band+'.jp2')
         dataset = rasterio.open(S2file)
         NX=dataset.width
         NY=dataset.height
+        print('Size of the image:',NX,NY)
         iystart=dataset.height-boxi[3]
         with rasterio.open(S2file) as image:
             w=image.read(1, window=Window(boxi[0]-1,iystart,  boxi[1]-boxi[0]+1,  boxi[3]-boxi[2]+1))
+#            w=image.read(1, window=Window(iystart,  boxi[0]-1,   boxi[3]-boxi[2]+1, boxi[1]-boxi[0]+1))
         [nx,ny]=w.shape
         dx=10. 
         dy=10.  # will be updated later
+        #fig, ax = plt.subplots(figsize=(12,12))
+        #plot1=plot.show(w,vmin=1800,vmax=2300)
+
         arrs.append(np.transpose(np.flipud(w)))
 
     imgs = np.array(arrs, dtype=arrs[0].dtype)

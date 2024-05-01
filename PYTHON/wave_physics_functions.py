@@ -29,7 +29,6 @@ def  wavespec_Efth_to_Ekxky(eft1s,fren,dfreq,dirn,dth,dkx=0.0001,dky=0.0001,nkx=
     else: 
         eftn=eft1s
     Hs1 = 4*np.sqrt(np.sum(np.sum(eftn,axis=1)* dfreq)*dth)
-    print('COUCOU:',Hs1)
 # wraps around directions
     dlast=dirn[0]+360.
     dirm=np.concatenate([dirn,[dlast]])

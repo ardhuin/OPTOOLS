@@ -147,6 +147,7 @@ def surface_from_Efth_noxr(eftn,fren,df_vec,th_vec,dth,seed=0,nx=2048,ny=2048,dx
     Hs2=4*np.sqrt(np.sum(np.sum(Ekxky))*dkx*dky)
     Ekxky = Ekxky * (Hs1/Hs2)**2
     Etot=np.sum(Ekxky.flatten())*dkx*dky
+# Note that in DeCarlo et al. Qkk is defined from double-sided spectrum , here we compute from single-sided spectrum, hence the factor 0.5
     Qkk=np.sqrt(np.sum(Ekxky.flatten()**2)*dkx*dky*0.5)/Etot
     Hskk=4*np.sqrt(Etot)
 # make sure energy is exactly conserved (assuming kmax is consistent with fmax

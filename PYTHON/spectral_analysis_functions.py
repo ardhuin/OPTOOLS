@@ -181,15 +181,16 @@ def FFT2D_two_arrays(arraya,arrayb,dx,dy,n,isplot=0):
 
     Eta=np.zeros((nxtile,nytile))
     Etb=np.zeros((nxtile,nytile))
-    phase=np.zeros((nxtile,nytile))
+    phase=np.zeros((nxtile,nytile),dtype = 'complex_')
     #Eta_all=np.zeros((nxtile,nytile,mspec))
-    phases=np.zeros((nxtile,nytile,mspec))
+    phases=np.zeros((nxtile,nytile,mspec),dtype = 'complex_')
     if isplot:
         fig1,ax1=plt.subplots(figsize=(12,6))
         ax1.pcolormesh(X,Y,arraya)
         colors = plt.cm.seismic(np.linspace(0,1,mspec))
 
     ### --- Calculate spectrum for each tiles ----------------------------
+    nspec=0
     for m in range(mspec):
         ### 1. Selection of tile ------------------------------
         if (m<n**2):
@@ -244,17 +245,21 @@ def FFT2D_two_arrays(arraya,arrayb,dx,dy,n,isplot=0):
         Etb[:,:] = Etb[:,:] + (abs(tileFFT2_shift)**2) *normalization #          % sum of spectra for all tiles
 
         phase=phase+(tileFFT2_shift*np.conj(tileFFT1_shift))*normalization
+        nspec=nspec+1
         phases[:,:,m]=tileFFT2_shift*np.conj(tileFFT1_shift)/(abs(tileFFT2_shift)*abs(tileFFT1_shift)); 
 
-# Now works with averaged spectra
-   
-    Eta=Eta/mspec
-    Etb=Etb/mspec
-    coh=abs((phase/mspec)**2)/(Eta*Etb)      # spectral coherence
-    ang=np.angle(phase)
-    crosr=np.real(phase)/mspec
-    angstd=np.std(np.angle(phases),axis=2)
+# rotates phases around the mean phase to be able to compute std
+    for m in range(mspec):
+        phases[:,:,m]=phases[:,:,m]/phase;
 
+# Now works with averaged spectra
+    Eta=Eta/nspec
+    Etb=Etb/nspec
+    coh=abs((phase/nspec)**2)/(Eta*Etb)      # spectral coherence
+    ang=np.angle(phase,deg=False)
+    crosr=np.real(phase)/mspec
+    angstd=np.std(np.angle(phases,deg=False),axis=2)
+    
     return Eta,Etb,ang,angstd,coh,crosr,phases,kx2,ky2,dkxtile,dkytile
 
 ##############################################################################
@@ -270,13 +275,13 @@ def FFT2D_two_arrays_nm_detrend(arraya,arrayb,dx,dy,n,m,isplot=0,detrend='linear
     arrayad=np.zeros((nxa,nya))
     arraybd=np.zeros((nxa,nya))
     
-    print('sizes:',nxa,nya,np.shape(arraya))
+    #print('sizes:',nxa,nya,np.shape(arraya))
            
     mspec=n*m+(n-1)*(m-1)
     nxtile=nxa//n
     nytile=nya//m
 
-    print('tile sizes:',nxtile,nytile)
+    #print('tile sizes:',nxtile,nytile)
 
     dkxtile=1/(dx*nxtile)   
     dkytile=1/(dy*nytile)
@@ -311,9 +316,8 @@ def FFT2D_two_arrays_nm_detrend(arraya,arrayb,dx,dy,n,m,isplot=0,detrend='linear
 
     Eta=np.zeros((nxtile,nytile))
     Etb=np.zeros((nxtile,nytile))
-    phase=np.zeros((nxtile,nytile))
-    #Eta_all=np.zeros((nxtile,nytile,mspec))
-    phases=np.zeros((nxtile,nytile,mspec))
+    phase=np.zeros((nxtile,nytile),dtype = 'complex_')
+    phases=np.zeros((nxtile,nytile,mspec),dtype = 'complex_')
     if isplot:
         fig1,ax1=plt.subplots(figsize=(12,6))
         ax1.pcolormesh(X,Y,arraya)
@@ -367,7 +371,6 @@ def FFT2D_two_arrays_nm_detrend(arraya,arrayb,dx,dy,n,m,isplot=0,detrend='linear
             YY = Y2.T.flatten()
             A = np.c_[XX,YY, np.ones(nxy)]
             ZZ = array1.T.flatten()
-            print('sizes:',nxa,nya,np.shape(ZZ),nxy,np.shape(ZZ))
             C,_,_,_ = scipy.linalg.lstsq(A,ZZ)    # coefficients
             Z2 = C[0]*X2 + C[1]*Y2 + C[2]
             detrenda = array1- Z2
@@ -402,6 +405,10 @@ def FFT2D_two_arrays_nm_detrend(arraya,arrayb,dx,dy,n,m,isplot=0,detrend='linear
 
         phase=phase+(tileFFT2_shift*np.conj(tileFFT1_shift))*normalization
         phases[:,:,im]=tileFFT2_shift*np.conj(tileFFT1_shift)/(abs(tileFFT2_shift)*abs(tileFFT1_shift)); 
+
+# rotates phases around the mean phase to be able to compute std
+    for m in range(mspec):
+        phases[:,:,m]=phases[:,:,m]/phase;
 
 # Now works with averaged spectra
    
