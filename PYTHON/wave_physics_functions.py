@@ -33,18 +33,23 @@ def  wavespec_Efth_to_Ekxky(eft1s,fren,dfreq,dirn,dth,dkx=0.0001,dky=0.0001,nkx=
     dlast=dirn[0]+360.
     dirm=np.concatenate([dirn,[dlast]])
     elast=eftn[:,0]
-    eftm=np.concatenate([eftn.T,[elast]]).T
+    eftm1=np.concatenate([eftn.T,[elast]]).T
+# adds zero energy in a low frequency to avoid interpolation across k=0
+    ffirst=fren[0]-0.9*(fren[1]-fren[0])
+    frem=np.concatenate([[ffirst],fren])
+    efirst=eftm1[0,:]*0
+    eftm=np.concatenate([[efirst],eftm1])
 
 #plt.pcolormesh(fren, dirm, np.log10(eftm).T)
-    kn=(2*np.pi*fren)**2/(grav*2*np.pi)   # cycles / meter
-    kn2=np.tile(kn.reshape(nf,1),(1,nt+1))
+    km=(2*np.pi*frem)**2/(grav*2*np.pi)   # cycles / meter
+    km2=np.tile(km.reshape(nf+1,1),(1,nt+1))
 
 # eftn*df*dth = Ek*k*dk*dth -> Ek = efth *df /(k * dk)  =  efth *Cg /k
-    Cg2=np.sqrt(grav/(kn2*tpi))*0.5
-    Jac=Cg2/kn2
-    dirm2=np.tile(dirm.T,(nf,1))*np.pi/180.
-    kxn=kn2*np.cos(dirm2+trackangle)
-    kyn=kn2*np.sin(dirm2+trackangle)
+    Cg2=np.sqrt(grav/(km2*tpi))*0.5
+    Jac=Cg2/km2
+    dirm2=np.tile(dirm.T,(nf+1,1))*np.pi/180.
+    kxn=km2*np.cos(dirm2+trackangle)
+    kyn=km2*np.sin(dirm2+trackangle)
     #plt.scatter(kxn,kyn,  marker='.', s = 20)
     kx=np.linspace(-nkx*dkx,(nkx-1)*dkx,nkx*2)
     ky=np.linspace(-nky*dky,(nky-1)*dky,nky*2)
@@ -99,10 +104,67 @@ def  wavespec_Efth_to_first3(efth,fren,dfreq,dirn,dth)  :
     Tm0m1=np.sum(Ef*dfreq/fren)/Etot
     Hs=4*np.sqrt(Etot) 
   #     print('WHAT:',ind,fren[ind],Ef[ind],a1[ind],b1[ind],m1[ind],efth[ind,:])
-    th1m=np.arctan(b1,a1)/d2r
+    th1m=np.arctan2(b1,a1)/d2r
   #  print('TEST:',nf,nt,m1,'##',np.sum(efth[5,:]*np.cos(dirn))*dth/Ef[5],a1[5],b1[5],m1[5])
     sth1m=np.sqrt(np.abs(2.0*(1-m1)))/d2r
     return Ef,th1m,sth1m,Hs,Tm0m1,Qf,Qkk
+
+#############################################################################
+def  wavespec_Efth_to_first5(efth,fren,dfreq,dirn,dth)  :
+    '''
+    Computes first 5 moments from E(f,theta) spectrum
+    inputs :
+            - etfs1 : spectrum
+    output : 
+            - Ef, th1m ... 
+
+    '''
+    d2r=np.pi/180
+    grav=9.81
+    wn=(2.*np.pi*fren)**2/grav
+    Cg=grav/(4*np.pi*fren) 
+    dk=2.*np.pi*dfreq/Cg
+    [nf,nt]=np.shape(efth)
+    dir2=np.tile((dirn*d2r).reshape(1,nt),(nf,1))
+    Ef=np.sum(efth,             axis=1)*dth
+    Etot=np.sum(Ef*dfreq)
+    eftn=0.5*(efth+np.roll(efth,nt//2,axis=1))
+
+    #a1E=np.sum(efth*np.cos(dir2),axis=1)*dth
+    #b1E=np.sum(efth*np.sin(dir2),axis=1)*dth
+    a1=np.zeros(nf)
+    b1=np.zeros(nf)
+    m1=np.zeros(nf)
+    a2=np.zeros(nf)
+    b2=np.zeros(nf)
+    m2=np.zeros(nf)
+    Q1=np.zeros(nf)
+    Q2=0
+  #  print('TEST:',np.shape(dirn),np.shape(efth),dirn,dth)
+    for ind in range(nf):
+       #Ef[ind]=np.sum(efth[ind,:]                    )*dth
+       a1[ind]=np.sum(efth[ind,:]*np.cos(dirn[:]*d2r))*dth/Ef[ind]
+       b1[ind]=np.sum(efth[ind,:]*np.sin(dirn[:]*d2r))*dth/Ef[ind]
+       m1[ind]=np.sqrt(a1[ind]**2+b1[ind]**2)
+       a2[ind]=np.sum(efth[ind,:]*np.cos(2*dirn[:]*d2r))*dth/Ef[ind]
+       b2[ind]=np.sum(efth[ind,:]*np.sin(2*dirn[:]*d2r))*dth/Ef[ind]
+       m2[ind]=np.sqrt(a2[ind]**2+b2[ind]**2)
+
+       Q1[ind]=np.sum(eftn[ind,:]**2)*dth
+       Q2=Q2+Q1[ind]*dfreq[ind]*grav**2/(2*((np.pi*2)**4*fren[ind]**3 ))
+    #   print('ft:',ind,fren[ind],wn[ind],'Cg:',Cg[ind],dfreq[ind]/(wn[ind]*dk[ind]),grav**2/(2*((np.pi*2)**4*fren[ind]**3 )) )
+    Qkk=np.sqrt(Q2)/Etot
+    Qf=np.sqrt(np.sum(Ef**2*dfreq))/Etot
+    Tm0m1=np.sum(Ef*dfreq/fren)/Etot
+    Hs=4*np.sqrt(Etot) 
+  #     print('WHAT:',ind,fren[ind],Ef[ind],a1[ind],b1[ind],m1[ind],efth[ind,:])
+    th1m=np.arctan2(b1,a1)/d2r
+    th2m=np.arctan2(b2,a2)/d2r
+  #  print('TEST:',nf,nt,m1,'##',np.sum(efth[5,:]*np.cos(dirn))*dth/Ef[5],a1[5],b1[5],m1[5])
+    sth1m=np.sqrt(np.abs(2.0*(1-m1)))/d2r
+    sth2m=np.sqrt(np.abs(0.5*(1-m2)))/d2r
+    return Ef,th1m,sth1m,th2m,sth2m, Hs,Tm0m1,Qf,Qkk
+
 
 #############################################################################
 def wavespec_MEM(a0,a1,a2,b1,b2, ndirs):
